@@ -33,14 +33,46 @@
 ;;; Code:
 
 (require 'ob)
-(eval-when-compile (require 'cl))
+(require 'dash)
+(require 's)
+(require 'f)
+
+;;; babel framework
+
+(add-to-list 'org-src-lang-modes '("ipython" . python))
+
+(defvar org-babel-default-header-args:ipython '())
 
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
+  (debug-msg body)
+  (debug-msg params)
+  ;; TODO:
   7)
 
-(add-to-list 'org-src-lang-modes '("ipython" . python))
+(defun org-babel-prep-session:ipython (session params)
+  "Prepare SESSION according to the header arguments in PARAMS.
+VARS contains resolved variable references"
+  ;; TODO: c-u c-c c-v c-z
+  (debug-msg "we're prepping!")
+  )
+
+(defun org-babel-load-session:ipython (session body params)
+  "Load BODY into SESSION."
+  ;; TODO: c-c c-v c-l
+  (debug-msg "we're loading!")
+  )
+
+(defun org-babel-ipython-initiate-session (&optional session params)
+  "Create a session named SESSION according to PARAMS."
+  ;; TODO: c-c c-v c-z
+  (unless (string= session "none")
+    (debug-msg "initiate sessh!")))
+
+;;; process management
+
+;;; evaluation
 
 (provide 'ob-python)
 
