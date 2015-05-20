@@ -1,7 +1,5 @@
 ;;; ob-ipython.el --- org-babel functions for IPython evaluation
 
-;; Copyright (C) 2009-2014 Free Software Foundation, Inc.
-
 ;; Author: Greg Sexton <gregsexton@gmail.com>
 ;; Keywords: literate programming, reproducible research
 ;; Homepage: http://www.gregsexton.org
