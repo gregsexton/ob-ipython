@@ -38,27 +38,11 @@
 (eval-when-compile (require 'cl))
 
 (defun org-babel-execute:ipython (body params)
-  "Execute a block of iPython code with Babel.
+  "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
-  (let* ((session (org-babel-python-initiate-session
-                   (cdr (assoc :session params))))
-         (result-params (cdr (assoc :result-params params)))
-         (result-type (cdr (assoc :result-type params)))
-         (return-val (when (and (eq result-type 'value) (not session))
-                       (cdr (assoc :return params))))
-         (preamble (cdr (assoc :preamble params)))
-         (full-body
-          (org-babel-expand-body:generic
-           (concat body (if return-val (format "\nreturn %s" return-val) ""))
-           params (org-babel-variable-assignments:python params)))
-         (result (org-babel-python-evaluate
-                  session full-body result-type result-params preamble)))
-    (org-babel-reassemble-table
-     result
-     (org-babel-pick-name (cdr (assoc :colname-names params))
-                          (cdr (assoc :colnames params)))
-     (org-babel-pick-name (cdr (assoc :rowname-names params))
-                          (cdr (assoc :rownames params))))))
+  7)
+
+(add-to-list 'org-src-lang-modes '("ipython" . python))
 
 (provide 'ob-python)
 
