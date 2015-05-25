@@ -71,15 +71,15 @@ This function is called by `org-babel-execute-src-block'."
   "Prepare SESSION according to the header arguments in PARAMS.
 VARS contains resolved variable references"
   ;; TODO: c-u c-c c-v c-z
-  (debug-msg "we're prepping!")
-  )
+  (debug-msg "we're prepping!"))
 
 (defun org-babel-load-session:ipython (session body params)
   "Load BODY into SESSION."
   ;; TODO: c-c c-v c-l
-  (debug-msg "we're loading!")
-  )
+  (debug-msg "we're loading!"))
 
+;;; TODO: create a session idempotently and then connect a repl using --existing
+;;; TODO: do I need to do my own idempotency?
 (defun org-babel-ipython-initiate-session (&optional session params)
   "Create a session named SESSION according to PARAMS."
   ;; TODO: c-c c-v c-z
