@@ -1,6 +1,7 @@
 from IPython.lib.kernel import find_connection_file
 import IPython.kernel.blocking.client as client
 
+import sys
 import threading
 
 import pprint
@@ -10,7 +11,7 @@ import tornado
 import tornado.web
 
 # TODO:
-cf = find_connection_file('17715')
+cf = find_connection_file('emacs-default')
 
 c = client.BlockingKernelClient(connection_file=cf)
 c.load_connection_file()
@@ -76,11 +77,11 @@ def make_app():
         tornado.web.url(r"/debug", DebugHandler),
         ])
 
-def main():
+def main(args):
     app = make_app()
-    # TODO: port should be an arg
-    app.listen(8888)
+    # TODO: parse args properly
+    app.listen(args[1])
     tornado.ioloop.IOLoop.current().start()
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)

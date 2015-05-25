@@ -38,6 +38,22 @@
 (require 'f)
 (require 'json)
 
+;;; variables
+
+(defcustom ob-ipython-kernel-extra-args '()
+  "List of extra args to pass when creating a kernel."
+  :group 'ob-ipython)
+
+(defcustom ob-ipython-driver-port 9988
+  "Port to use for http driver."
+  :group 'ob-ipython)
+
+(defcustom ob-ipython-driver-path
+  (f-expand "./driver.py"
+            (or (-when-let (f load-file-name) (f-dirname f)) default-directory))
+  "Path to the driver script."
+  :group 'ob-ipython)
+
 ;;; babel framework
 
 (add-to-list 'org-src-lang-modes '("ipython" . python))
@@ -47,8 +63,8 @@
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
-  (debug-msg body)
-  (debug-msg params)
+  (ob-ipython--create-kernel "default")
+  (ob-ipython--create-driver)
   (ob-ipython--eval (ob-ipython--execute-request body)))
 
 (defun org-babel-prep-session:ipython (session params)
@@ -72,49 +88,50 @@ VARS contains resolved variable references"
 
 ;;; process management
 
-;; (progn
-;;   ;; (kill-process "ipython-driver")
-;;   (debug-clear)
-;;   (let ((process (start-process "ipython-driver" nil "python" "./driver.py")))
-;;     (set-process-filter process (lambda (proc output)
-;;                                   (debug-msg "-----")
-;;                                   (debug-msg output)
-;;                                   (debug-msg "-----")
-;;                                   (debug-msg "")
-;;                                   (debug-msg (json-read-from-string output))))
-;;     (set-process-sentinel process (lambda (proc event)
-;;                                     (debug-msg proc)
-;;                                     (debug-msg event)
-;;                                     (when (not (process-live-p proc))
-;;                                       (if (not (= 0 (process-exit-status process)))
-;;                                           (amz/error "Process %s exited with status code %d"
-;;                                                      executable (process-exit-status process))
-;;                                         (funcall callback)))))))
+;;; TODO: figure out names and who owns them
+(defun ob-ipython--kernel-cmd (name)
+  (-concat (list "ipython" "kernel" (format "--IPKernelApp.connection_file=emacs-%s.json" name))
+           ob-ipython-kernel-extra-args))
+
+(defun ob-ipython--create-process (name cmd)
+  (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
+
+(defun ob-ipython--create-kernel (name)
+  (when (not (process-live-p (get-process (format "kernel-%s" name))))
+    (ob-ipython--create-process (format "kernel-%s" name) (ob-ipython--kernel-cmd name))))
+
+;;; TODO: think there's a race here. the process takes a moment to get
+;;; warm but we issue a request immediately
+(defun ob-ipython--create-driver ()
+  (when (not (process-live-p (get-process "ob-ipython-driver")))
+    (ob-ipython--create-process "ob-ipython-driver"
+                                (list (locate-file "python" exec-path)
+                                      ob-ipython-driver-path
+                                      (number-to-string ob-ipython-driver-port)))))
 
 ;;; evaluation
 
 (defun ob-ipython--execute-request (code)
   (let ((url-request-data code)
         (url-request-method "POST"))
-    ;; TODO: port
-    (with-current-buffer (url-retrieve-synchronously "http://localhost:8888/execute")
-      (when (equal (url-http-parse-response) 200)
+    (with-current-buffer (url-retrieve-synchronously
+                          (format "http://localhost:%d/execute" ob-ipython-driver-port))
+      (if (>= (url-http-parse-response) 400)
+          ;; TODO: output to a debug buffer
+          (error "Got an error back from the service. See *ob-ipython-debug*")
         (goto-char url-http-end-of-headers)
         (let ((json-array-type 'list))
           (json-read))))))
 
 (defun ob-ipython--eval (service-response)
-  (-if-let (resp service-response)
-      (->> resp
-           (-filter (lambda (msg) (string= (cdr (assoc 'msg_type msg)) "execute_result")))
-           car
-           (assoc 'content)
-           (assoc 'data)
-           (assoc 'text/plain)
-           cdr)
-    ;; TODO: output to a debug buffer
-    (error "Got an error back from the service. See *ob-ipython-debug*")))
+  (->> service-response
+       (-filter (lambda (msg) (string= (cdr (assoc 'msg_type msg)) "execute_result")))
+       car
+       (assoc 'content)
+       (assoc 'data)
+       (assoc 'text/plain)
+       cdr))
 
-(provide 'ob-python)
+(provide 'ob-ipython)
 
-;;; ob-python.el ends here
+;;; ob-ipython.el ends here
