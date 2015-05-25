@@ -36,6 +36,7 @@
 (require 'dash)
 (require 's)
 (require 'f)
+(require 'json)
 
 ;;; babel framework
 
@@ -48,8 +49,7 @@
 This function is called by `org-babel-execute-src-block'."
   (debug-msg body)
   (debug-msg params)
-  ;; TODO:
-  7)
+  (ob-ipython--eval (ob-ipython--execute-request body)))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
@@ -72,7 +72,48 @@ VARS contains resolved variable references"
 
 ;;; process management
 
+;; (progn
+;;   ;; (kill-process "ipython-driver")
+;;   (debug-clear)
+;;   (let ((process (start-process "ipython-driver" nil "python" "./driver.py")))
+;;     (set-process-filter process (lambda (proc output)
+;;                                   (debug-msg "-----")
+;;                                   (debug-msg output)
+;;                                   (debug-msg "-----")
+;;                                   (debug-msg "")
+;;                                   (debug-msg (json-read-from-string output))))
+;;     (set-process-sentinel process (lambda (proc event)
+;;                                     (debug-msg proc)
+;;                                     (debug-msg event)
+;;                                     (when (not (process-live-p proc))
+;;                                       (if (not (= 0 (process-exit-status process)))
+;;                                           (amz/error "Process %s exited with status code %d"
+;;                                                      executable (process-exit-status process))
+;;                                         (funcall callback)))))))
+
 ;;; evaluation
+
+(defun ob-ipython--execute-request (code)
+  (let ((url-request-data code)
+        (url-request-method "POST"))
+    ;; TODO: port
+    (with-current-buffer (url-retrieve-synchronously "http://localhost:8888/execute")
+      (when (equal (url-http-parse-response) 200)
+        (goto-char url-http-end-of-headers)
+        (let ((json-array-type 'list))
+          (json-read))))))
+
+(defun ob-ipython--eval (service-response)
+  (-if-let (resp service-response)
+      (->> resp
+           (-filter (lambda (msg) (string= (cdr (assoc 'msg_type msg)) "execute_result")))
+           car
+           (assoc 'content)
+           (assoc 'data)
+           (assoc 'text/plain)
+           cdr)
+    ;; TODO: output to a debug buffer
+    (error "Got an error back from the service. See *ob-ipython-debug*")))
 
 (provide 'ob-python)
 
