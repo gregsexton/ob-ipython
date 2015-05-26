@@ -60,12 +60,23 @@
 
 (defvar org-babel-default-header-args:ipython '())
 
+;;; TODO: probably need some kind of behaviour lookup based on passed
+;;; in params and what I'm holding.
+
+;;; TODO: need to check file extension of file
+
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
-  (ob-ipython--create-kernel "default")
-  (ob-ipython--create-driver)
-  (ob-ipython--eval (ob-ipython--execute-request body)))
+  (let* ((file (cdr (assoc :file params))))
+    (debug-msg params)
+    (ob-ipython--create-kernel "default")
+    (ob-ipython--create-driver)
+    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request body)))
+      (debug-msg result)
+      (if file
+          (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
+        (->> result (assoc 'text/plain) cdr)))))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
@@ -85,6 +96,14 @@ VARS contains resolved variable references"
   ;; TODO: c-c c-v c-z
   (unless (string= session "none")
     (debug-msg "initiate sessh!")))
+
+;;; utils
+
+(defun ob-ipython--write-base64-string (file b64-string)
+  (with-temp-buffer
+    (insert b64-string)
+    (base64-decode-region (point-min) (point-max))
+    (write-file file)))
 
 ;;; process management
 
@@ -125,12 +144,12 @@ VARS contains resolved variable references"
 
 (defun ob-ipython--eval (service-response)
   (->> service-response
-       (-filter (lambda (msg) (string= (cdr (assoc 'msg_type msg)) "execute_result")))
-       car
-       (assoc 'content)
-       (assoc 'data)
-       (assoc 'text/plain)
-       cdr))
+       (-filter (lambda (msg) (-contains? '("execute_result" "display_data")
+                                          (cdr (assoc 'msg_type msg)))))
+       (-mapcat (lambda (msg) (->> msg
+                                   (assoc 'content)
+                                   (assoc 'data)
+                                   cdr)))))
 
 (provide 'ob-ipython)
 
