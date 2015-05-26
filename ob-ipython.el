@@ -54,56 +54,13 @@
   "Path to the driver script."
   :group 'ob-ipython)
 
-;;; babel framework
-
-(add-to-list 'org-src-lang-modes '("ipython" . python))
-
-(defvar org-babel-default-header-args:ipython '())
-
-;;; TODO: probably need some kind of behaviour lookup based on passed
-;;; in params and what I'm holding.
-
-;;; TODO: need to check file extension of file
-
-(defun org-babel-execute:ipython (body params)
-  "Execute a block of IPython code with Babel.
-This function is called by `org-babel-execute-src-block'."
-  (let* ((file (cdr (assoc :file params))))
-    (debug-msg params)
-    (ob-ipython--create-kernel "default")
-    (ob-ipython--create-driver)
-    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request body)))
-      (debug-msg result)
-      (if file
-          (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
-        (->> result (assoc 'text/plain) cdr)))))
-
-(defun org-babel-prep-session:ipython (session params)
-  "Prepare SESSION according to the header arguments in PARAMS.
-VARS contains resolved variable references"
-  ;; TODO: c-u c-c c-v c-z
-  (debug-msg "we're prepping!"))
-
-(defun org-babel-load-session:ipython (session body params)
-  "Load BODY into SESSION."
-  ;; TODO: c-c c-v c-l
-  (debug-msg "we're loading!"))
-
-;;; TODO: create a session idempotently and then connect a repl using --existing
-;;; TODO: do I need to do my own idempotency?
-(defun org-babel-ipython-initiate-session (&optional session params)
-  "Create a session named SESSION according to PARAMS."
-  ;; TODO: c-c c-v c-z
-  (unless (string= session "none")
-    (debug-msg "initiate sessh!")))
-
 ;;; utils
 
 (defun ob-ipython--write-base64-string (file b64-string)
   (with-temp-buffer
-    (insert b64-string)
-    (base64-decode-region (point-min) (point-max))
-    (write-file file)))
+  (insert b64-string)
+  (base64-decode-region (point-min) (point-max))
+  (write-file file)))
 
 ;;; process management
 
@@ -150,6 +107,49 @@ VARS contains resolved variable references"
                                    (assoc 'content)
                                    (assoc 'data)
                                    cdr)))))
+
+;;; babel framework
+
+(add-to-list 'org-src-lang-modes '("ipython" . python))
+
+(defvar org-babel-default-header-args:ipython '())
+
+;;; TODO: probably need some kind of behaviour lookup based on passed
+;;; in params and what I'm holding.
+
+;;; TODO: need to check file extension of file
+
+(defun org-babel-execute:ipython (body params)
+  "Execute a block of IPython code with Babel.
+This function is called by `org-babel-execute-src-block'."
+  (let* ((file (cdr (assoc :file params))))
+    (debug-msg params)
+    (ob-ipython--create-kernel "default")
+    (ob-ipython--create-driver)
+    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request body)))
+      (debug-msg result)
+      (if file
+          (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
+        (->> result (assoc 'text/plain) cdr)))))
+
+(defun org-babel-prep-session:ipython (session params)
+  "Prepare SESSION according to the header arguments in PARAMS.
+VARS contains resolved variable references"
+  ;; TODO: c-u c-c c-v c-z
+  (debug-msg "we're prepping!"))
+
+(defun org-babel-load-session:ipython (session body params)
+  "Load BODY into SESSION."
+  ;; TODO: c-c c-v c-l
+  (debug-msg "we're loading!"))
+
+;;; TODO: create a session idempotently and then connect a repl using --existing
+;;; TODO: do I need to do my own idempotency?
+(defun org-babel-ipython-initiate-session (&optional session params)
+  "Create a session named SESSION according to PARAMS."
+  ;; TODO: c-c c-v c-z
+  (unless (string= session "none")
+    (debug-msg "initiate sessh!")))
 
 (provide 'ob-ipython)
 
