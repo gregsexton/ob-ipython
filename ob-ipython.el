@@ -62,6 +62,17 @@
   (base64-decode-region (point-min) (point-max))
   (write-file file)))
 
+(defun ob-ipython--create-traceback-buffer (traceback)
+  (let ((buf (get-buffer-create "*ob-ipython-traceback*")))
+    (with-current-buffer buf
+      (special-mode)
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (-each traceback
+          (lambda (line) (insert (format "%s\n" line))))
+        (ansi-color-apply-on-region (point-min) (point-max))))
+    (pop-to-buffer buf)))
+
 ;;; process management
 
 ;;; TODO: figure out names and who owns them
@@ -93,20 +104,44 @@
     (with-current-buffer (url-retrieve-synchronously
                           (format "http://localhost:%d/execute" ob-ipython-driver-port))
       (if (>= (url-http-parse-response) 400)
-          ;; TODO: output to a debug buffer
-          (error "Got an error back from the service. See *ob-ipython-debug*")
-        (goto-char url-http-end-of-headers)
-        (let ((json-array-type 'list))
+    ;; TODO: output to a debug buffer
+    (error "Got an error back from the service. See *ob-ipython-debug*")
+  (goto-char url-http-end-of-headers)
+  (let ((json-array-type 'list))
           (json-read))))))
 
-(defun ob-ipython--eval (service-response)
-  (->> service-response
+(defun ob-ipython--extract-result (msgs)
+  (->> msgs
        (-filter (lambda (msg) (-contains? '("execute_result" "display_data")
                                           (cdr (assoc 'msg_type msg)))))
        (-mapcat (lambda (msg) (->> msg
                                    (assoc 'content)
                                    (assoc 'data)
                                    cdr)))))
+
+(defun ob-ipython--extract-error (msgs)
+  (let ((error-content (->> msgs
+                            (-filter (lambda (msg) (string= "execute_reply" (cdr (assoc 'msg_type msg)))))
+                            car
+                            (assoc 'content)
+                            cdr)))
+    ;; TODO: this doesn't belong in this abstraction
+    (ob-ipython--create-traceback-buffer (cdr (assoc 'traceback error-content)))
+    (format "%s: %s" (cdr (assoc 'ename error-content)) (cdr (assoc 'evalue error-content)))))
+
+(defun ob-ipython--extract-status (msgs)
+  (->> msgs
+       (-filter (lambda (msg) (string= "execute_reply" (cdr (assoc 'msg_type msg)))))
+       car
+       (assoc 'content)
+       (assoc 'status)
+       cdr))
+
+(defun ob-ipython--eval (service-response)
+  (let ((status (ob-ipython--extract-status service-response)))
+    (cond ((string= "ok" status) (ob-ipython--extract-result service-response))
+          ((string= "abort" status) (error "Kernel execution aborted."))
+          ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
 
 ;;; babel framework
 
