@@ -86,14 +86,16 @@
     (pop-to-buffer buf)))
 
 (defun ob-ipython--create-stdout-buffer (stdout)
-  (let ((buf (get-buffer-create "*ob-ipython-stdout*")))
-    (with-current-buffer buf
-      (special-mode)
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (insert stdout)
-        (goto-char (point-min))))
-    (pop-to-buffer buf)))
+  (when (not (s-blank? stdout))
+    (save-excursion
+      (let ((buf (get-buffer-create "*ob-ipython-stdout*")))
+        (with-current-buffer buf
+          (special-mode)
+          (let ((inhibit-read-only t))
+            (erase-buffer)
+            (insert stdout)
+            (goto-char (point-min))))
+        (pop-to-buffer buf)))))
 
 ;;; process management
 
