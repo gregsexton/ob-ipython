@@ -10,13 +10,6 @@ import json
 import tornado
 import tornado.web
 
-# TODO:
-cf = find_connection_file('emacs-default')
-
-c = client.BlockingKernelClient(connection_file=cf)
-c.load_connection_file()
-c.start_channels()
-
 # TODO: this is currently really fragile, need to make this much more robust
 # error handling around stuff, with proper http response, status code etc
 
@@ -45,14 +38,27 @@ def msg_router(name, ch):
         handler = get_handler(msg)
         handler(msg)
 
-chans = [('io', c.get_iopub_msg), ('shell', c.get_shell_msg), ('stdin', c.get_stdin_msg)]
-for name, ch in chans:
-    t = threading.Thread(target=msg_router, args=(name, ch))
-    t.start()
+clients = {}
+
+def create_client(name):
+    cf = find_connection_file('emacs-' + name)
+    c = client.BlockingKernelClient(connection_file=cf)
+    c.load_connection_file()
+    c.start_channels()
+    chans = [('io', c.get_iopub_msg), ('shell', c.get_shell_msg), ('stdin', c.get_stdin_msg)]
+    for name, ch in chans:
+        t = threading.Thread(target=msg_router, args=(name, ch))
+        t.start()
+    return c
+
+def get_client(name):
+    if name not in clients:
+        clients[name] = create_client(name)
+    return clients[name]
 
 class ExecuteHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
-    def post(self):
+    def post(self, name):
         msgs = []
         def acc_msg(msg):
             msgs.append(msg)
@@ -64,12 +70,13 @@ class ExecuteHandler(tornado.web.RequestHandler):
             self.write(json.dumps(msgs, default=str))
             self.finish()
 
+        c = get_client(name)
         msgid = c.execute(self.request.body.decode("utf-8"))
         install_handlers(msgid, acc_msg, finalize)
 
 class InspectHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
-    def post(self):
+    def post(self, name):
         msgs = []
         def acc_msg(msg):
             msgs.append(msg)
@@ -83,6 +90,7 @@ class InspectHandler(tornado.web.RequestHandler):
 
         req = json.loads(self.request.body.decode("utf-8"))
         code = req['code']
+        c = get_client(name)
         msgid = c.inspect(code,
                           cursor_pos=req.get('pos', len(code)),
                           detail_level=req.get('detail', 0))
@@ -90,13 +98,14 @@ class InspectHandler(tornado.web.RequestHandler):
 
 class DebugHandler(tornado.web.RequestHandler):
     def get(self):
+        self.write(json.dumps(clients, default=str))
         self.write(json.dumps(handlers, default=str))
 
 def make_app():
     return tornado.web.Application([
         # TODO: uri should take the kernel
-        tornado.web.url(r"/execute", ExecuteHandler),
-        tornado.web.url(r"/inspect", InspectHandler),
+        tornado.web.url(r"/execute/(\w+)", ExecuteHandler),
+        tornado.web.url(r"/inspect/(\w+)", InspectHandler),
         tornado.web.url(r"/debug", DebugHandler),
         ])
 

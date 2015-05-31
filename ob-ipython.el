@@ -75,10 +75,12 @@
 
 ;;; process management
 
-;;; TODO: figure out names and who owns them
 (defun ob-ipython--kernel-cmd (name)
   (-concat (list "ipython" "kernel" (format "--IPKernelApp.connection_file=emacs-%s.json" name))
            ob-ipython-kernel-extra-args))
+
+(defun ob-ipython--kernel-repl-cmd (name)
+  (list "ipython" "console" "--existing" (format "emacs-%s.json" name)))
 
 (defun ob-ipython--create-process (name cmd)
   (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
@@ -87,27 +89,34 @@
   (when (not (process-live-p (get-process (format "kernel-%s" name))))
     (ob-ipython--create-process (format "kernel-%s" name) (ob-ipython--kernel-cmd name))))
 
-;;; TODO: think there's a race here. the process takes a moment to get
-;;; warm but we issue a request immediately
 (defun ob-ipython--create-driver ()
   (when (not (process-live-p (get-process "ob-ipython-driver")))
     (ob-ipython--create-process "ob-ipython-driver"
                                 (list (locate-file "python" exec-path)
                                       ob-ipython-driver-path
-                                      (number-to-string ob-ipython-driver-port)))))
+                                      (number-to-string ob-ipython-driver-port)))
+    ;; give driver a chance to bind to a port and start serving
+    ;; requests. so horrible; so effective.
+    (sleep-for 1)))
+
+(defun ob-ipython--create-repl (name)
+  (let ((python-shell-buffer-name (format "ob-ipy-repl-%s" name)))
+    (run-python (s-join " " (ob-ipython--kernel-repl-cmd name))
+                nil nil)
+    (format "*%s*" python-shell-buffer-name)))
 
 ;;; evaluation
 
-(defun ob-ipython--execute-request (code)
+(defun ob-ipython--execute-request (code name)
   (let ((url-request-data code)
         (url-request-method "POST"))
     (with-current-buffer (url-retrieve-synchronously
-                          (format "http://localhost:%d/execute" ob-ipython-driver-port))
+                          (format "http://localhost:%d/execute/%s" ob-ipython-driver-port name))
       (if (>= (url-http-parse-response) 400)
-    ;; TODO: output to a debug buffer
-    (error "Got an error back from the service. See *ob-ipython-debug*")
-  (goto-char url-http-end-of-headers)
-  (let ((json-array-type 'list))
+          ;; TODO: output to a debug buffer
+          (error "Got an error back from the service. See *ob-ipython-debug*")
+        (goto-char url-http-end-of-headers)
+        (let ((json-array-type 'list))
           (json-read))))))
 
 (defun ob-ipython--extract-result (msgs)
@@ -153,7 +162,8 @@
                                          (detail . ,(or detail 0)))))
         (url-request-method "POST"))
     (with-current-buffer (url-retrieve-synchronously
-                          (format "http://localhost:%d/inspect" ob-ipython-driver-port))
+                          ;; TODO: hardcoded the nil session here
+                          (format "http://localhost:%d/inspect/nil" ob-ipython-driver-port))
       (if (>= (url-http-parse-response) 400)
           ;; TODO: output to a debug buffer
           (error "Got an error back from the service. See *ob-ipython-debug*")
@@ -199,12 +209,11 @@
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
-  (let* ((file (cdr (assoc :file params))))
-    (debug-msg params)
-    (ob-ipython--create-kernel "default")
-    (ob-ipython--create-driver)
-    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request body)))
-      (debug-msg result)
+  (debug-msg params)
+  (let* ((file (cdr (assoc :file params)))
+         (session (cdr (assoc :session params))))
+    (org-babel-ipython-initiate-session session)
+    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request body session)))
       (if file
           (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
         (->> result (assoc 'text/plain) cdr)))))
@@ -212,21 +221,22 @@ This function is called by `org-babel-execute-src-block'."
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
 VARS contains resolved variable references"
-  ;; TODO: c-u c-c c-v c-z
-  (debug-msg "we're prepping!"))
+  ;; c-u c-c c-v c-z
+  (error "Currently unsupported."))
 
 (defun org-babel-load-session:ipython (session body params)
   "Load BODY into SESSION."
-  ;; TODO: c-c c-v c-l
-  (debug-msg "we're loading!"))
+  ;; c-c c-v c-l
+  (error "Currently unsupported."))
 
-;;; TODO: create a session idempotently and then connect a repl using --existing
-;;; TODO: do I need to do my own idempotency?
 (defun org-babel-ipython-initiate-session (&optional session params)
   "Create a session named SESSION according to PARAMS."
-  ;; TODO: c-c c-v c-z
-  (unless (string= session "none")
-    (debug-msg "initiate sessh!")))
+  (if (string= session "none")
+      (error "ob-ipython currently only supports evaluation using a session.
+Make sure your src block has a :session param.")
+    (ob-ipython--create-driver)
+    (ob-ipython--create-kernel session)
+    (ob-ipython--create-repl session)))
 
 (provide 'ob-ipython)
 
