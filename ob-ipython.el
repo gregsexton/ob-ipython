@@ -73,6 +73,28 @@
         (ansi-color-apply-on-region (point-min) (point-max))))
     (pop-to-buffer buf)))
 
+(defun ob-ipython--create-inspect-buffer (doc)
+  (let ((buf (get-buffer-create "*ob-ipython-inspect*")))
+    (with-current-buffer buf
+      (special-mode)
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert doc)
+        (ansi-color-apply-on-region (point-min) (point-max))
+        (whitespace-cleanup)
+        (goto-char (point-min))))
+    (pop-to-buffer buf)))
+
+(defun ob-ipython--create-stdout-buffer (stdout)
+  (let ((buf (get-buffer-create "*ob-ipython-stdout*")))
+    (with-current-buffer buf
+      (special-mode)
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert stdout)
+        (goto-char (point-min))))
+    (pop-to-buffer buf)))
+
 ;;; process management
 
 (defun ob-ipython--kernel-cmd (name)
@@ -120,6 +142,13 @@
           (json-read))))))
 
 (defun ob-ipython--extract-result (msgs)
+  ;; TODO: this doesn't belong in this abstraction
+  (ob-ipython--create-stdout-buffer
+   (->> msgs
+        (-filter (lambda (msg) (string= "stream" (cdr (assoc 'msg_type msg)))))
+        (-filter (lambda (msg) (string= "stdout" (->> msg (assoc 'content) (assoc 'name) cdr))))
+        (-map (lambda (msg) (->> msg (assoc 'content) (assoc 'text) cdr)))
+        (-reduce 's-concat)))
   (->> msgs
        (-filter (lambda (msg) (-contains? '("execute_result" "display_data" "inspect_reply")
                                           (cdr (assoc 'msg_type msg)))))
@@ -183,16 +212,7 @@
 (defun ob-ipython-inspect (buffer pos)
   (interactive (list (current-buffer) (point)))
   (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
-      (let ((buf (get-buffer-create "*ob-ipython-inspect*")))
-        (with-current-buffer buf
-          (special-mode)
-          (let ((inhibit-read-only t))
-            (erase-buffer)
-            (insert result)
-            (ansi-color-apply-on-region (point-min) (point-max))
-            (whitespace-cleanup)
-            (goto-char (point-min))))
-        (pop-to-buffer buf))
+      (ob-ipython--create-inspect-buffer result)
     (message "No documentation was found.")))
 
 ;;; babel framework
