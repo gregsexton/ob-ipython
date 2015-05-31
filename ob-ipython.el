@@ -112,7 +112,7 @@
 
 (defun ob-ipython--extract-result (msgs)
   (->> msgs
-       (-filter (lambda (msg) (-contains? '("execute_result" "display_data")
+       (-filter (lambda (msg) (-contains? '("execute_result" "display_data" "inspect_reply")
                                           (cdr (assoc 'msg_type msg)))))
        (-mapcat (lambda (msg) (->> msg
                                    (assoc 'content)
@@ -121,7 +121,8 @@
 
 (defun ob-ipython--extract-error (msgs)
   (let ((error-content (->> msgs
-                            (-filter (lambda (msg) (string= "execute_reply" (cdr (assoc 'msg_type msg)))))
+                            (-filter (lambda (msg) (-contains? '("execute_reply" "inspect_reply")
+                                                               (cdr (assoc 'msg_type msg)))))
                             car
                             (assoc 'content)
                             cdr)))
@@ -131,7 +132,8 @@
 
 (defun ob-ipython--extract-status (msgs)
   (->> msgs
-       (-filter (lambda (msg) (string= "execute_reply" (cdr (assoc 'msg_type msg)))))
+       (-filter (lambda (msg) (-contains? '("execute_reply" "inspect_reply")
+                                          (cdr (assoc 'msg_type msg)))))
        car
        (assoc 'content)
        (assoc 'status)
@@ -142,6 +144,46 @@
     (cond ((string= "ok" status) (ob-ipython--extract-result service-response))
           ((string= "abort" status) (error "Kernel execution aborted."))
           ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
+
+;;; inspection
+
+(defun ob-ipython--inspect-request (code &optional pos detail)
+  (let ((url-request-data (json-encode `((code . ,code)
+                                         (pos . ,(or pos (length code)))
+                                         (detail . ,(or detail 0)))))
+        (url-request-method "POST"))
+    (with-current-buffer (url-retrieve-synchronously
+                          (format "http://localhost:%d/inspect" ob-ipython-driver-port))
+      (if (>= (url-http-parse-response) 400)
+          ;; TODO: output to a debug buffer
+          (error "Got an error back from the service. See *ob-ipython-debug*")
+        (goto-char url-http-end-of-headers)
+        (let ((json-array-type 'list))
+          (json-read))))))
+
+(defun ob-ipython--inspect (buffer pos)
+  (let* ((code (with-current-buffer buffer
+                 (buffer-substring-no-properties (point-min) (point-max))))
+         (resp (ob-ipython--inspect-request code pos 0))
+         (status (ob-ipython--extract-status resp)))
+    (if (string= "ok" status)
+        (ob-ipython--extract-result resp)
+      (error (ob-ipython--extract-error service-response)))))
+
+(defun ob-ipython-inspect (buffer pos)
+  (interactive (list (current-buffer) (point)))
+  (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
+      (let ((buf (get-buffer-create "*ob-ipython-inspect*")))
+        (with-current-buffer buf
+          (special-mode)
+          (let ((inhibit-read-only t))
+            (erase-buffer)
+            (insert result)
+            (ansi-color-apply-on-region (point-min) (point-max))
+            (whitespace-cleanup)
+            (goto-char (point-min))))
+        (pop-to-buffer buf))
+    (message "No documentation was found.")))
 
 ;;; babel framework
 

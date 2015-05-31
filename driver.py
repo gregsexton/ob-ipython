@@ -32,7 +32,7 @@ def get_handler(msg):
     def ignore(msg): pass
     acc, final = handlers.get(msg['parent_header']['msg_id'], (ignore, ignore))
     msg_type = msg.get('msg_type', '')
-    if msg_type == 'execute_reply':
+    if msg_type in ['execute_reply', 'inspect_reply']:
         return final
     return acc
 
@@ -40,6 +40,7 @@ def msg_router(name, ch):
     while True:
         msg = ch()
         msg['channel'] = name
+        # TODO: remove
         print(json.dumps(msg, default=str))
         handler = get_handler(msg)
         handler(msg)
@@ -66,6 +67,27 @@ class ExecuteHandler(tornado.web.RequestHandler):
         msgid = c.execute(self.request.body.decode("utf-8"))
         install_handlers(msgid, acc_msg, finalize)
 
+class InspectHandler(tornado.web.RequestHandler):
+    @tornado.web.asynchronous
+    def post(self):
+        msgs = []
+        def acc_msg(msg):
+            msgs.append(msg)
+
+        def finalize(msg):
+            msgs.append(msg)
+            remove_handlers(msgid)
+            self.set_header("Content-Type", "application/json")
+            self.write(json.dumps(msgs, default=str))
+            self.finish()
+
+        req = json.loads(self.request.body.decode("utf-8"))
+        code = req['code']
+        msgid = c.inspect(code,
+                          cursor_pos=req.get('pos', len(code)),
+                          detail_level=req.get('detail', 0))
+        install_handlers(msgid, acc_msg, finalize)
+
 class DebugHandler(tornado.web.RequestHandler):
     def get(self):
         self.write(json.dumps(handlers, default=str))
@@ -74,6 +96,7 @@ def make_app():
     return tornado.web.Application([
         # TODO: uri should take the kernel
         tornado.web.url(r"/execute", ExecuteHandler),
+        tornado.web.url(r"/inspect", InspectHandler),
         tornado.web.url(r"/debug", DebugHandler),
         ])
 
