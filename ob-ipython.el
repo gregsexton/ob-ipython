@@ -123,7 +123,7 @@
           procs)))
 
 (defun ob-ipython--create-driver ()
-  (when (not (process-live-p (get-process "ob-ipython-driver")))
+  (when (not (process-live-p (ob-ipython--get-driver-process)))
     (ob-ipython--create-process "ob-ipython-driver"
                                 (list (locate-file "python" exec-path)
                                       ob-ipython-driver-path
@@ -131,6 +131,9 @@
     ;; give driver a chance to bind to a port and start serving
     ;; requests. so horrible; so effective.
     (sleep-for 1)))
+
+(defun ob-ipython--get-driver-process ()
+  (get-process "ob-ipython-driver"))
 
 (defun ob-ipython--create-repl (name)
   (let ((python-shell-buffer-name (format "ob-ipy-repl-%s" name)))
@@ -161,6 +164,7 @@ a new kernel will be started."
   (interactive (ob-ipython--choose-kernel))
   (when proc
     (delete-process proc)
+    (-when-let (p (ob-ipython--get-driver-process)) (delete-process p))
     (message (format "Killed %s" (process-name proc)))))
 
 ;;; evaluation
