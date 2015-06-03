@@ -113,6 +113,15 @@
   (when (not (process-live-p (get-process (format "kernel-%s" name))))
     (ob-ipython--create-process (format "kernel-%s" name) (ob-ipython--kernel-cmd name))))
 
+(defun ob-ipython--get-kernel-processes ()
+  (let ((procs (-filter (lambda (p)
+                          (s-starts-with? "kernel-" (process-name p)))
+                        (process-list))))
+    (-zip (-map (-compose (-partial 's-replace "kernel-" "")
+                          'process-name)
+                procs)
+          procs)))
+
 (defun ob-ipython--create-driver ()
   (when (not (process-live-p (get-process "ob-ipython-driver")))
     (ob-ipython--create-process "ob-ipython-driver"
@@ -129,6 +138,31 @@
                 nil nil)
     (format "*%s*" python-shell-buffer-name)))
 
+;;; kernel management
+
+(defun ob-ipython--choose-kernel ()
+  (let ((procs (ob-ipython--get-kernel-processes)))
+    (-> (ido-completing-read "kernel? " (-map 'car procs) nil t)
+        (assoc procs)
+        cdr
+        list)))
+
+(defun ob-ipython-interrupt-kernel (proc)
+  "Interrupt a running kernel. Useful for terminating infinite
+loops etc. If things get really desparate try `ob-ipython-kill-kernel'."
+  (interactive (ob-ipython--choose-kernel))
+  (when proc
+    (interrupt-process proc)
+    (message (format "Interrupted %s" (process-name proc)))))
+
+(defun ob-ipython-kill-kernel (proc)
+  "Kill a kernel process. If you then re-evaluate a source block
+a new kernel will be started."
+  (interactive (ob-ipython--choose-kernel))
+  (when proc
+    (delete-process proc)
+    (message (format "Killed %s" (process-name proc)))))
+
 ;;; evaluation
 
 (defun ob-ipython--execute-request (code name)
@@ -137,10 +171,10 @@
     (with-current-buffer (url-retrieve-synchronously
                           (format "http://localhost:%d/execute/%s" ob-ipython-driver-port name))
       (if (>= (url-http-parse-response) 400)
-          ;; TODO: output to a debug buffer
-          (error "Got an error back from the service. See *ob-ipython-debug*")
-        (goto-char url-http-end-of-headers)
-        (let ((json-array-type 'list))
+    ;; TODO: output to a debug buffer
+    (error "Got an error back from the service. See *ob-ipython-debug*")
+  (goto-char url-http-end-of-headers)
+  (let ((json-array-type 'list))
           (json-read))))))
 
 (defun ob-ipython--extract-result (msgs)
@@ -193,8 +227,8 @@
                                          (detail . ,(or detail 0)))))
         (url-request-method "POST"))
     (with-current-buffer (url-retrieve-synchronously
-                          ;; TODO: hardcoded the nil session here
-                          (format "http://localhost:%d/inspect/nil" ob-ipython-driver-port))
+                          ;; TODO: hardcoded the default session here
+                          (format "http://localhost:%d/inspect/default" ob-ipython-driver-port))
       (if (>= (url-http-parse-response) 400)
           ;; TODO: output to a debug buffer
           (error "Got an error back from the service. See *ob-ipython-debug*")
@@ -212,10 +246,11 @@
       (error (ob-ipython--extract-error service-response)))))
 
 (defun ob-ipython-inspect (buffer pos)
+  "Ask a kernel for documentation on the thing at POS in BUFFER."
   (interactive (list (current-buffer) (point)))
   (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
-      (ob-ipython--create-inspect-buffer result)
-    (message "No documentation was found.")))
+    (ob-ipython--create-inspect-buffer result)
+  (message "No documentation was found.")))
 
 ;;; babel framework
 
@@ -228,14 +263,19 @@
 
 ;;; TODO: need to check file extension of file
 
+(defun ob-ipython--normalize-session (session)
+  (if (string= "default" session)
+      (error "default is reserved for when no name is provided. Please use a different session name.")
+    (or session "default")))
+
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
-  (debug-msg params)
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params))))
     (org-babel-ipython-initiate-session session)
-    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request body session)))
+    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request
+                                          body (ob-ipython--normalize-session session))))
       (if file
           (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
         (->> result (assoc 'text/plain) cdr)))))
@@ -257,8 +297,8 @@ VARS contains resolved variable references"
       (error "ob-ipython currently only supports evaluation using a session.
 Make sure your src block has a :session param.")
     (ob-ipython--create-driver)
-    (ob-ipython--create-kernel session)
-    (ob-ipython--create-repl session)))
+    (ob-ipython--create-kernel (ob-ipython--normalize-session session))
+    (ob-ipython--create-repl (ob-ipython--normalize-session session))))
 
 (provide 'ob-ipython)
 
