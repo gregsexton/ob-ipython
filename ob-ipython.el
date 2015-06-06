@@ -276,11 +276,14 @@ This function is called by `org-babel-execute-src-block'."
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params))))
     (org-babel-ipython-initiate-session session)
-    (-when-let (result (ob-ipython--eval (ob-ipython--execute-request
-                                          body (ob-ipython--normalize-session session))))
-      (if file
-          (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
-        (->> result (assoc 'text/plain) cdr)))))
+    (-when-let (result (ob-ipython--eval
+                        (ob-ipython--execute-request
+                         (org-babel-expand-body:generic body params (org-babel-variable-assignments:python params))
+                         (ob-ipython--normalize-session session))))
+      (cond ((and file (string= (f-ext file) "png"))
+             (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+            (file (error "%s is currently an unsupported file extension." (f-ext file)))
+            (t (->> result (assoc 'text/plain) cdr))))))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
