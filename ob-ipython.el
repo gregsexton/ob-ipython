@@ -136,10 +136,8 @@
   (get-process "ob-ipython-driver"))
 
 (defun ob-ipython--create-repl (name)
-  (let ((python-shell-buffer-name (format "ob-ipy-repl-%s" name)))
-    (run-python (s-join " " (ob-ipython--kernel-repl-cmd name))
-                nil nil)
-    (format "*%s*" python-shell-buffer-name)))
+  (run-python (s-join " " (ob-ipython--kernel-repl-cmd name)) nil nil)
+  (format "*%s*" python-shell-buffer-name))
 
 ;;; kernel management
 
