@@ -57,10 +57,12 @@
 ;;; utils
 
 (defun ob-ipython--write-base64-string (file b64-string)
-  (with-temp-buffer
-  (insert b64-string)
-  (base64-decode-region (point-min) (point-max))
-  (write-file file)))
+  (if b64-string
+      (with-temp-buffer
+        (insert b64-string)
+        (base64-decode-region (point-min) (point-max))
+        (write-file file))
+    (error "No output was produced to write to a file.")))
 
 (defun ob-ipython--create-traceback-buffer (traceback)
   (let ((buf (get-buffer-create "*ob-ipython-traceback*")))
@@ -260,10 +262,8 @@ a new kernel will be started."
 
 (defvar org-babel-default-header-args:ipython '())
 
-;;; TODO: probably need some kind of behaviour lookup based on passed
-;;; in params and what I'm holding.
-
-;;; TODO: need to check file extension of file
+;;; TODO: refactor: probably need some kind of behaviour lookup based
+;;; on passed in params and what I'm holding.
 
 (defun ob-ipython--normalize-session (session)
   (if (string= "default" session)
