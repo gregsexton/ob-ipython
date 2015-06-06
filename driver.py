@@ -10,8 +10,8 @@ import json
 import tornado
 import tornado.web
 
-# TODO: this is currently really fragile, need to make this much more robust
-# error handling around stuff, with proper http response, status code etc
+# TODO: this is currently fragile, need to make this more robust. error
+# handling around stuff, with proper http response, status code etc
 
 handlers = {}
 
@@ -33,8 +33,6 @@ def msg_router(name, ch):
     while True:
         msg = ch()
         msg['channel'] = name
-        # TODO: remove
-        print(json.dumps(msg, default=str))
         handler = get_handler(msg)
         handler(msg)
 
@@ -103,7 +101,6 @@ class DebugHandler(tornado.web.RequestHandler):
 
 def make_app():
     return tornado.web.Application([
-        # TODO: uri should take the kernel
         tornado.web.url(r"/execute/(\w+)", ExecuteHandler),
         tornado.web.url(r"/inspect/(\w+)", InspectHandler),
         tornado.web.url(r"/debug", DebugHandler),

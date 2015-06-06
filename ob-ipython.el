@@ -99,6 +99,15 @@
             (goto-char (point-min))))
         (pop-to-buffer buf)))))
 
+(defun ob-ipython--dump-error (err-msg)
+  (with-current-buffer (get-buffer-create "*ob-ipython-debug*")
+    (special-mode)
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert err-msg)
+      (goto-char (point-min))))
+  (error "There was a fatal error trying to process the request. See *ob-ipython-debug*"))
+
 ;;; process management
 
 (defun ob-ipython--kernel-cmd (name)
@@ -175,10 +184,9 @@ a new kernel will be started."
     (with-current-buffer (url-retrieve-synchronously
                           (format "http://localhost:%d/execute/%s" ob-ipython-driver-port name))
       (if (>= (url-http-parse-response) 400)
-    ;; TODO: output to a debug buffer
-    (error "Got an error back from the service. See *ob-ipython-debug*")
-  (goto-char url-http-end-of-headers)
-  (let ((json-array-type 'list))
+          (ob-ipython--dump-error (buffer-string))
+        (goto-char url-http-end-of-headers)
+        (let ((json-array-type 'list))
           (json-read))))))
 
 (defun ob-ipython--extract-result (msgs)
@@ -234,8 +242,7 @@ a new kernel will be started."
                           ;; TODO: hardcoded the default session here
                           (format "http://localhost:%d/inspect/default" ob-ipython-driver-port))
       (if (>= (url-http-parse-response) 400)
-          ;; TODO: output to a debug buffer
-          (error "Got an error back from the service. See *ob-ipython-debug*")
+          (ob-ipython--dump-error (buffer-string))
         (goto-char url-http-end-of-headers)
         (let ((json-array-type 'list))
           (json-read))))))
@@ -261,9 +268,6 @@ a new kernel will be started."
 (add-to-list 'org-src-lang-modes '("ipython" . python))
 
 (defvar org-babel-default-header-args:ipython '())
-
-;;; TODO: refactor: probably need some kind of behaviour lookup based
-;;; on passed in params and what I'm holding.
 
 (defun ob-ipython--normalize-session (session)
   (if (string= "default" session)
