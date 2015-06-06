@@ -71,7 +71,7 @@ class ExecuteHandler(tornado.web.RequestHandler):
             self.finish()
 
         c = get_client(name)
-        msgid = c.execute(self.request.body.decode("utf-8"))
+        msgid = c.execute(self.request.body.decode("utf-8"), allow_stdin=False)
         install_handlers(msgid, acc_msg, finalize)
 
 class InspectHandler(tornado.web.RequestHandler):
