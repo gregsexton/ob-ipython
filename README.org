@@ -1,3 +1,187 @@
 #+TITLE: Readme
 
-* TODO Write this.
+** What is this?
+
+   An Emacs library that allows Org mode to evaluate Python code
+   blocks using an IPython kernel.
+
+*** How does this compare to IPython notebook?
+
+    I tried using the IPython notebook but quickly became frustrated
+    with trying to write code in a web browser. This provides another
+    option for creating documents containing executable Python code,
+    but in Emacs - with everything that entails.
+
+*** Why not use [[https://tkf.github.io/emacs-ipython-notebook/][EIN]]?
+
+    EIN is really great. It kept me happy for quite a while but I
+    started to feel constrained by the cell format of IPython
+    notebooks. What I really wanted was to embed code in Org
+    documents. It's hard to compete with Org mode! Just a few main
+    points in favour of Org:
+
+    * Org's markup is better than Markdown, in my opinion.
+    * Org's organisational, editing and navigation facilities are much
+      better than EIN.
+    * Org's tables...
+    * Org can export to more formats.
+    * I like how Org opens a new buffer when editing code so that you
+      can use a Python major mode rather than trying to handle
+      multiple major modes in one.
+
+    I also found myself hitting bugs in EIN where evaluation and doc
+    lookup would just stop working. I regularly would kill and reopen
+    buffers or restart the IPython kernel and this was getting
+    frustrating.
+
+*** How does this compare to ob-python (regular Org Python integration)?
+
+    It is very similar.
+
+    I think this is more robust. The executed code is actually sent to
+    a running IPython kernel which has an architecture designed for
+    this purpose. The way ob-python works feels like a bit of a hack.
+    I ran in to race conditions using ob-python where the Org buffer
+    would update with results before the Python REPL had finished
+    evaluating the code block.
+
+    It's easier to get plots and images out of this. I also provide
+    several features missing when using plain ob-python, such as
+    looking up documentation and getting IPython-style tracebacks when
+    things go wrong. You can also use IPython-specific features such
+    as ~%timeit~.
+
+** Screenshot
+
+   [[./screenshot.jpg]]
+
+** How do I install this?
+
+   Before installing, you'll need IPython installed and working. You
+   also will need the [[http://www.tornadoweb.org/en/stable/][Tornado]] library. This is a dependency of
+   ipython-notebook, if you already have that.
+
+   This package will probably be in MELPA by the time you read this. I
+   recommend installing from there. For manual installation, you'll
+   need the following dependencies first:
+
+   * https://github.com/magnars/dash.el
+   * https://github.com/magnars/s.el
+   * https://github.com/rejeep/f.el
+
+   Then just drop this somewhere in your load path and ~(require 'ob-ipython)~.
+
+** How do I use it?
+
+   Open an org file, add a SRC block and evaluate as you would any Org
+   SRC block (usually =C-c C-c=). Here I will run through some example
+   blocks.
+
+   This is the most basic ipython block. You /must/ provide a session
+   argument. You can name the session if you wish to use multiple to
+   separate state.
+
+   #+BEGIN_SRC org
+     ,#+BEGIN_SRC ipython :session
+       %matplotlib inline
+       import matplotlib.pyplot as plt
+       import numpy as np
+     ,#+END_SRC
+   #+END_SRC
+
+   Here we evaluate some code with a function definition.
+
+   #+BEGIN_SRC org
+     ,#+BEGIN_SRC ipython :session :exports both
+       def foo(x):
+           return x + 8
+
+       [foo(x) + 7 for x in range(7)]
+     ,#+END_SRC
+
+     ,#+RESULTS:
+     : [15, 16, 17, 18, 19, 20, 21]
+   #+END_SRC
+
+   This is how you can get a graphic out. Notice the file argument,
+   this must be provided. You must also ensure that you have evaluated
+   ~%matplotlib inline~ before evaluating this.
+
+   #+BEGIN_SRC org
+     ,#+BEGIN_SRC ipython :session :file /tmp/image.png :exports both
+       plt.hist(np.random.randn(20000), bins=200)
+     ,#+END_SRC
+   #+END_SRC
+
+   ob-ipython also supports providing variables and even tables to
+   code.
+
+   #+BEGIN_SRC org
+     ,#+TBLNAME: data_table
+     | a | 1 | 2 |
+     | b | 2 | 3 |
+     | c | 3 | 4 |
+
+     ,#+BEGIN_SRC ipython :session :exports both :var x=2 :var data=data_table
+       (x, data)
+     ,#+END_SRC
+
+     ,#+RESULTS:
+     : (2, [['a', 1, 2], ['b', 2, 3], ['c', 3, 4]])
+   #+END_SRC
+
+** What features are there outside of Org SRC block evaluation?
+
+   * You can ask the running IPython kernel for documentation. Open a
+     SRC block, place the point on the thing you're interested in and
+     run =M-x ob-ipython-inspect=. I recommend you bind this to a key!
+
+   * It's often easier to play with code using a REPL. With the point
+     in an ipython SRC block, you can open a REPL connected to the
+     current kernel by running =C-c C-v C-z=. I recommend you do this
+     anyway, as python-mode can now use this repl to provide
+     completion in code buffers.
+
+   * If evaluated code produces an error, this will be displayed
+     nicely in a buffer using IPython's traceback support.
+
+   * Stdout from code evaluation is displayed in a popup buffer. This
+     is great for debugging or getting verbose output that is best
+     left out of documents.
+
+   * You can interrupt or kill a running kernel. This is helpful if
+     things get stuck or really broken. See =M-x
+     ob-ipython-interrupt-kernel= and =M-x ob-ipython-kill-kernel=,
+     respectively.
+
+** Tips and tricks
+
+   Here are a few things I've setup to make life better. These aren't
+   provided with ob-ipython but are recommended.
+
+   * Be sure to use ~%matplotlib inline~, otherwise graphics won't work.
+
+   * I use yasnippet to create src blocks. Here is the snippet I use.
+     It takes care of generating unique file names (when I want one)
+     so I don't have to think about this.
+
+     #+BEGIN_SRC snippet
+       # -*- mode: snippet -*-
+       # name: ipython block
+       # key: py
+       # --
+       ,#+BEGIN_SRC ipython :session ${1::file ${2:$$(let ((temporary-file-directory "./")) (make-temp-file "py" nil ".png"))} }:exports ${3:both}
+       $0
+       ,#+END_SRC
+     #+END_SRC
+
+   * I use the following Org settings:
+
+     #+BEGIN_SRC emacs-lisp
+       (setq org-confirm-babel-evaluate nil)   ;don't prompt me to confirm everytime I want to evaluate a block
+
+       ;;; display/update images in the buffer after I evaluate
+       (add-hook 'org-babel-after-execute-hook 'org-display-inline-images 'append)
+     #+END_SRC
+
+   * Open a REPL using =C-c C-v C-z= so that you get completion in Python buffers.
