@@ -5,7 +5,7 @@
    An Emacs library that allows Org mode to evaluate Python code
    blocks using an IPython kernel.
 
-*** How does this compare to IPython notebook?
+*** Why not use IPython notebook?
 
     I tried using the IPython notebook but quickly became frustrated
     with trying to write code in a web browser. This provides another
@@ -17,39 +17,38 @@
     EIN is really great. It kept me happy for quite a while but I
     started to feel constrained by the cell format of IPython
     notebooks. What I really wanted was to embed code in Org
-    documents. It's hard to compete with Org mode! Just a few main
-    points in favour of Org:
+    documents. It's hard to compete with Org mode! A few key points in
+    favour of Org:
 
-    * Org's markup is better than Markdown, in my opinion.
+    * In my opinion, Org's markup is better than Markdown.
     * Org's organisational, editing and navigation facilities are much
       better than EIN.
     * Org's tables...
-    * Org can export to more formats.
+    * Org can export to multiple formats.
     * I like how Org opens a new buffer when editing code so that you
       can use a Python major mode rather than trying to handle
       multiple major modes in one.
 
     I also found myself hitting bugs in EIN where evaluation and doc
-    lookup would just stop working. I regularly would kill and reopen
+    lookup would just stop working. I regularly had to kill and reopen
     buffers or restart the IPython kernel and this was getting
     frustrating.
 
-*** How does this compare to ob-python (regular Org Python integration)?
+*** How does this compare to regular Org Python integration (ob-python)?
 
-    It is very similar.
-
-    I think this is more robust. The executed code is actually sent to
-    a running IPython kernel which has an architecture designed for
-    this purpose. The way ob-python works feels like a bit of a hack.
-    I ran in to race conditions using ob-python where the Org buffer
-    would update with results before the Python REPL had finished
-    evaluating the code block.
+    I think this is more robust. The executed code is sent to a
+    running IPython kernel which has an architecture designed for this
+    purpose. The way ob-python works feels like a bit of a hack. I ran
+    in to race conditions using ob-python where the Org buffer would
+    update its results before the Python REPL had finished evaluating
+    the code block. This is what eventually drove me to write this.
 
     It's easier to get plots and images out of this. I also provide
-    several features missing when using plain ob-python, such as
+    several features I missed when using plain ob-python, such as
     looking up documentation and getting IPython-style tracebacks when
-    things go wrong. You can also use IPython-specific features such
-    as ~%timeit~.
+    things go wrong.
+
+    You can also use IPython-specific features such as ~%timeit~.
 
 ** Screenshot
 
@@ -58,7 +57,7 @@
 ** How do I install this?
 
    Before installing, you'll need IPython installed and working. You
-   also will need the [[http://www.tornadoweb.org/en/stable/][Tornado]] library. This is a dependency of
+   will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] library. This is a dependency of
    ipython-notebook, if you already have that.
 
    This package will probably be in MELPA by the time you read this. I
@@ -66,6 +65,7 @@
    need the following dependencies first:
 
    * https://github.com/magnars/dash.el
+       * Including dash-functional
    * https://github.com/magnars/s.el
    * https://github.com/rejeep/f.el
 
@@ -77,9 +77,8 @@
    SRC block (usually =C-c C-c=). Here I will run through some example
    blocks.
 
-   This is the most basic ipython block. You /must/ provide a session
-   argument. You can name the session if you wish to use multiple to
-   separate state.
+   This is the most basic ipython block. You *must* provide a session
+   argument. You can name the session if you wish to separate state.
 
    #+BEGIN_SRC org
      ,#+BEGIN_SRC ipython :session
@@ -89,22 +88,23 @@
      ,#+END_SRC
    #+END_SRC
 
-   Here we evaluate some code with a function definition.
+   Here we evaluate some code with a function definition using a named
+   session.
 
    #+BEGIN_SRC org
-     ,#+BEGIN_SRC ipython :session :exports both
+     ,#+BEGIN_SRC ipython :session mysession :exports both
        def foo(x):
-           return x + 8
+           return x + 9
 
        [foo(x) + 7 for x in range(7)]
      ,#+END_SRC
 
      ,#+RESULTS:
-     : [15, 16, 17, 18, 19, 20, 21]
+     : [16, 17, 18, 19, 20, 21, 22]
    #+END_SRC
 
-   This is how you can get a graphic out. Notice the file argument,
-   this must be provided. You must also ensure that you have evaluated
+   This is how you can get a graphic out. Notice the file argument.
+   This must be provided. You must also ensure that you have evaluated
    ~%matplotlib inline~ before evaluating this.
 
    #+BEGIN_SRC org
@@ -113,8 +113,7 @@
      ,#+END_SRC
    #+END_SRC
 
-   ob-ipython also supports providing variables and even tables to
-   code.
+   ob-ipython supports providing variables and even tables to code.
 
    #+BEGIN_SRC org
      ,#+TBLNAME: data_table
@@ -134,12 +133,12 @@
 
    * You can ask the running IPython kernel for documentation. Open a
      SRC block, place the point on the thing you're interested in and
-     run =M-x ob-ipython-inspect=. I recommend you bind this to a key!
+     run =M-x ob-ipython-inspect=. I recommend you bind this to a key.
 
    * It's often easier to play with code using a REPL. With the point
      in an ipython SRC block, you can open a REPL connected to the
      current kernel by running =C-c C-v C-z=. I recommend you do this
-     anyway, as python-mode can now use this repl to provide
+     anyway, as python-mode can now use this REPL to provide
      completion in code buffers.
 
    * If evaluated code produces an error, this will be displayed
