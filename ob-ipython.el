@@ -34,6 +34,7 @@
 ;;; Code:
 
 (require 'ob)
+(require 'ob-python)
 (require 'dash)
 (require 'dash-functional)
 (require 's)
