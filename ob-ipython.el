@@ -61,9 +61,10 @@
 (defun ob-ipython--write-base64-string (file b64-string)
   (if b64-string
       (with-temp-buffer
-        (insert b64-string)
-        (base64-decode-region (point-min) (point-max))
-        (write-file file))
+        (with-silent-modifications
+	  (insert b64-string)
+	  (base64-decode-region (point-min) (point-max))
+         (write-file file)))
     (error "No output was produced to write to a file.")))
 
 (defun ob-ipython--create-traceback-buffer (traceback)
