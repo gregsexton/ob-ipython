@@ -257,7 +257,7 @@ a new kernel will be started."
          (status (ob-ipython--extract-status resp)))
     (if (string= "ok" status)
         (ob-ipython--extract-result resp)
-      (error (ob-ipython--extract-error service-response)))))
+      (error (ob-ipython--extract-error resp)))))
 
 (defun ob-ipython-inspect (buffer pos)
   "Ask a kernel for documentation on the thing at POS in BUFFER."
