@@ -56,9 +56,9 @@
 
 ** How do I install this?
 
-   Before installing, you'll need IPython installed and working. You
-   will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] library. This is a dependency of
-   ipython-notebook, if you already have that.
+   Before installing, you'll need IPython (>= 3.0) installed and
+   working. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] library. This is a
+   dependency of ipython-notebook, if you already have that.
 
    This package will probably be in MELPA by the time you read this. I
    recommend installing from there. For manual installation, you'll
@@ -184,3 +184,11 @@
      #+END_SRC
 
    * Open a REPL using =C-c C-v C-z= so that you get completion in Python buffers.
+
+** Help, it doesn't work
+
+   First thing to do is check that you have all of the required
+   dependencies. Several common problems have been resolved in the
+   project's issues, so take a look there to see if your problem has a
+   quick fix. Otherwise feel free to cut an issue - I'll do my best to
+   help.
