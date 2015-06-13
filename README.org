@@ -57,12 +57,13 @@
 ** How do I install this?
 
    Before installing, you'll need IPython (>= 3.0) installed and
-   working. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] library. This is a
-   dependency of ipython-notebook, if you already have that.
+   working. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[https://zeromq.github.io/pyzmq/][PyZMQ]] libraries. These
+   are both dependencies of ipython-notebook, if you already have
+   that.
 
-   This package will probably be in MELPA by the time you read this. I
-   recommend installing from there. For manual installation, you'll
-   need the following dependencies first:
+   This package is now in MELPA. I recommend installing from there.
+   For manual installation, you'll need the following elisp
+   dependencies first:
 
    * https://github.com/magnars/dash.el
        * Including dash-functional
