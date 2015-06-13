@@ -139,7 +139,8 @@
 (defun ob-ipython--create-driver ()
   (when (not (process-live-p (ob-ipython--get-driver-process)))
     (ob-ipython--create-process "ob-ipython-driver"
-                                (list (locate-file "python" exec-path)
+                                (list (locate-file (if (eq system-type 'windows-nt) "python.exe" "python")
+                                                   exec-path)
                                       ob-ipython-driver-path
                                       (number-to-string ob-ipython-driver-port)))
     ;; give driver a chance to bind to a port and start serving
