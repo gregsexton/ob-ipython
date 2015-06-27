@@ -284,7 +284,8 @@ a new kernel will be started."
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
   (let* ((file (cdr (assoc :file params)))
-         (session (cdr (assoc :session params))))
+         (session (cdr (assoc :session params)))
+         (result-type (cdr (assoc :result-type params))))
     (org-babel-ipython-initiate-session session)
     (-when-let (ret (ob-ipython--eval
                      (ob-ipython--execute-request
@@ -292,11 +293,13 @@ This function is called by `org-babel-execute-src-block'."
                       (ob-ipython--normalize-session session))))
       (let ((result (cdr (assoc :result ret)))
             (output (cdr (assoc :output ret))))
-        (ob-ipython--create-stdout-buffer output)
-        (cond ((and file (string= (f-ext file) "png"))
-               (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
-              (file (error "%s is currently an unsupported file extension." (f-ext file)))
-              (t (->> result (assoc 'text/plain) cdr)))))))
+        (if (eq result-type 'output)
+            output
+          (ob-ipython--create-stdout-buffer output)
+          (cond ((and file (string= (f-ext file) "png"))
+                 (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+                (file (error "%s is currently an unsupported file extension." (f-ext file)))
+                (t (->> result (assoc 'text/plain) cdr))))))))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
