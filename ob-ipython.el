@@ -64,7 +64,8 @@
       (with-temp-buffer
         (insert b64-string)
         (base64-decode-region (point-min) (point-max))
-        (write-file file))
+        (let ((require-final-newline nil))
+          (write-file file)))
     (error "No output was produced to write to a file.")))
 
 (defun ob-ipython--create-traceback-buffer (traceback)
