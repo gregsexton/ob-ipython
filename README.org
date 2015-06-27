@@ -147,7 +147,8 @@
 
    * Stdout from code evaluation is displayed in a popup buffer. This
      is great for debugging or getting verbose output that is best
-     left out of documents.
+     left out of documents. If you wish to capture stdout in your
+     document use the =:results output= SRC block header.
 
    * You can interrupt or kill a running kernel. This is helpful if
      things get stuck or really broken. See =M-x
