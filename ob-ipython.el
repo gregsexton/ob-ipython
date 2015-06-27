@@ -189,19 +189,19 @@ a new kernel will be started."
     (with-current-buffer (url-retrieve-synchronously
                           (format "http://localhost:%d/execute/%s" ob-ipython-driver-port name))
       (if (>= (url-http-parse-response) 400)
-          (ob-ipython--dump-error (buffer-string))
-        (goto-char url-http-end-of-headers)
-        (let ((json-array-type 'list))
+    (ob-ipython--dump-error (buffer-string))
+  (goto-char url-http-end-of-headers)
+  (let ((json-array-type 'list))
           (json-read))))))
 
+(defun ob-ipython--extract-output (msgs)
+  (->> msgs
+       (-filter (lambda (msg) (string= "stream" (cdr (assoc 'msg_type msg)))))
+       (-filter (lambda (msg) (string= "stdout" (->> msg (assoc 'content) (assoc 'name) cdr))))
+       (-map (lambda (msg) (->> msg (assoc 'content) (assoc 'text) cdr)))
+       (-reduce 's-concat)))
+
 (defun ob-ipython--extract-result (msgs)
-  ;; TODO: this doesn't belong in this abstraction
-  (ob-ipython--create-stdout-buffer
-   (->> msgs
-        (-filter (lambda (msg) (string= "stream" (cdr (assoc 'msg_type msg)))))
-        (-filter (lambda (msg) (string= "stdout" (->> msg (assoc 'content) (assoc 'name) cdr))))
-        (-map (lambda (msg) (->> msg (assoc 'content) (assoc 'text) cdr)))
-        (-reduce 's-concat)))
   (->> msgs
        (-filter (lambda (msg) (-contains? '("execute_result" "display_data" "inspect_reply")
                                           (cdr (assoc 'msg_type msg)))))
@@ -232,7 +232,8 @@ a new kernel will be started."
 
 (defun ob-ipython--eval (service-response)
   (let ((status (ob-ipython--extract-status service-response)))
-    (cond ((string= "ok" status) (ob-ipython--extract-result service-response))
+    (cond ((string= "ok" status) `((:result . ,(ob-ipython--extract-result service-response))
+                                   (:output . ,(ob-ipython--extract-output service-response))))
           ((string= "abort" status) (error "Kernel execution aborted."))
           ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
 
@@ -285,14 +286,17 @@ This function is called by `org-babel-execute-src-block'."
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params))))
     (org-babel-ipython-initiate-session session)
-    (-when-let (result (ob-ipython--eval
-                        (ob-ipython--execute-request
-                         (org-babel-expand-body:generic body params (org-babel-variable-assignments:python params))
-                         (ob-ipython--normalize-session session))))
-      (cond ((and file (string= (f-ext file) "png"))
-             (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
-            (file (error "%s is currently an unsupported file extension." (f-ext file)))
-            (t (->> result (assoc 'text/plain) cdr))))))
+    (-when-let (ret (ob-ipython--eval
+                     (ob-ipython--execute-request
+                      (org-babel-expand-body:generic body params (org-babel-variable-assignments:python params))
+                      (ob-ipython--normalize-session session))))
+      (let ((result (cdr (assoc :result ret)))
+            (output (cdr (assoc :output ret))))
+        (ob-ipython--create-stdout-buffer output)
+        (cond ((and file (string= (f-ext file) "png"))
+               (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+              (file (error "%s is currently an unsupported file extension." (f-ext file)))
+              (t (->> result (assoc 'text/plain) cdr)))))))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
