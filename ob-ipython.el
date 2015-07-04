@@ -289,7 +289,8 @@ This function is called by `org-babel-execute-src-block'."
     (org-babel-ipython-initiate-session session)
     (-when-let (ret (ob-ipython--eval
                      (ob-ipython--execute-request
-                      (org-babel-expand-body:generic body params (org-babel-variable-assignments:python params))
+                      (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
+                                                     params (org-babel-variable-assignments:python params))
                       (ob-ipython--normalize-session session))))
       (let ((result (cdr (assoc :result ret)))
             (output (cdr (assoc :output ret))))
