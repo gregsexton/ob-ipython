@@ -23,7 +23,8 @@ def remove_handlers(msgid):
 
 def get_handler(msg):
     def ignore(msg): pass
-    acc, final = handlers.get(msg['parent_header']['msg_id'], (ignore, ignore))
+    acc, final = handlers.get(msg['parent_header'].get('msg_id', ''),
+                              (ignore, ignore))
     msg_type = msg.get('msg_type', '')
     if msg_type in ['execute_reply', 'inspect_reply']:
         return final
