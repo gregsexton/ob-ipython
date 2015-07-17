@@ -237,6 +237,15 @@ a new kernel will be started."
           ((string= "abort" status) (error "Kernel execution aborted."))
           ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
 
+(defun ob-ipython-make-table (result params)
+  "Parse a table that the python driver returns in org format"
+  (let ((orgtext (->> result (assoc 'text/x-org) cdr)))
+    (with-temp-buffer
+      (insert orgtext)
+      (previous-line)
+      (if (org-at-table-p) (org-babel-read-table) orgtext)
+      )))
+
 ;;; inspection
 
 (defun ob-ipython--inspect-request (code &optional pos detail)
@@ -285,7 +294,8 @@ a new kernel will be started."
 This function is called by `org-babel-execute-src-block'."
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params)))
-         (result-type (cdr (assoc :result-type params))))
+         (result-type (cdr (assoc :result-type params)))
+         (result-params (cdr (assoc :result-params params))))
     (org-babel-ipython-initiate-session session)
     (-when-let (ret (ob-ipython--eval
                      (ob-ipython--execute-request
@@ -300,6 +310,10 @@ This function is called by `org-babel-execute-src-block'."
           (cond ((and file (string= (f-ext file) "png"))
                  (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
                 (file (error "%s is currently an unsupported file extension." (f-ext file)))
+                ((assoc 'text/x-org result)
+                 (org-babel-result-cond result-params
+                   (->> result (assoc 'text/x-org) cdr)
+                   (ob-ipython-make-table result params)))
                 (t (->> result (assoc 'text/plain) cdr))))))))
 
 (defun org-babel-prep-session:ipython (session params)
