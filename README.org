@@ -12,7 +12,7 @@
     option for creating documents containing executable Python code,
     but in Emacs - with everything that entails.
 
-*** Why not use [[https://tkf.github.io/emacs-ipython-notebook/][EIN]]?
+*** Why not use [[https://millejoh.github.io/emacs-ipython-notebook/][EIN]]?
 
     EIN is really great. It kept me happy for quite a while but I
     started to feel constrained by the cell format of IPython
