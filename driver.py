@@ -1,5 +1,4 @@
-from IPython.lib.kernel import find_connection_file
-import IPython.kernel.blocking.client as client
+import jupyter_client as client
 
 import sys
 import threading
@@ -39,7 +38,7 @@ def msg_router(name, ch):
 clients = {}
 
 def create_client(name):
-    cf = find_connection_file('emacs-' + name)
+    cf = client.find_connection_file('emacs-' + name)
     c = client.BlockingKernelClient(connection_file=cf)
     c.load_connection_file()
     c.start_channels()
