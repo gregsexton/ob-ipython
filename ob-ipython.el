@@ -125,7 +125,7 @@
   (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
 
 (defun ob-ipython--create-kernel (name)
-  (when (not (process-live-p (get-process (format "kernel-%s" name))))
+  (when (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
     (ob-ipython--create-process (format "kernel-%s" name) (ob-ipython--kernel-cmd name))))
 
 (defun ob-ipython--get-kernel-processes ()
@@ -138,7 +138,7 @@
           procs)))
 
 (defun ob-ipython--create-driver ()
-  (when (not (process-live-p (ob-ipython--get-driver-process)))
+  (when (not (ignore-errors (process-live-p (ob-ipython--get-driver-process))))
     (ob-ipython--create-process "ob-ipython-driver"
                                 (list (locate-file (if (eq system-type 'windows-nt) "python.exe" "python")
                                                    exec-path)
