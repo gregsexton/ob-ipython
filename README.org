@@ -56,10 +56,11 @@
 
 ** How do I install this?
 
-   Before installing, you'll need IPython (>= 3.0) installed and
-   working. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[https://zeromq.github.io/pyzmq/][PyZMQ]] libraries. These
-   are both dependencies of ipython-notebook, if you already have
-   that.
+   Before installing, you'll need IPython (>= 4.0) installed and
+   working. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[http://jupyter.readthedocs.org/en/latest/install.html][Jupyter]] libraries.
+
+   (If you're on IPython 3 you can use the ~ipython3~ branch of this
+   repo. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[https://zeromq.github.io/pyzmq/][PyZMQ]] libraries.)
 
    This package is now in MELPA. I recommend installing from there.
    For manual installation, you'll need the following elisp
