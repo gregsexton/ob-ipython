@@ -55,12 +55,14 @@
    [[./screenshot.jpg]]
 
 ** How do I install this?
-
-   Before installing, you'll need IPython (>= 4.0) installed and
-   working. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[http://jupyter.readthedocs.org/en/latest/install.html][Jupyter]] libraries.
-
-   (If you're on IPython 3 you can use the ~ipython3~ branch of this
-   repo. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[https://zeromq.github.io/pyzmq/][PyZMQ]] libraries.)
+In version 4.0, [[http://ipython.org/][IPython]] has transitioned from a monolithic architecture to being a just one of the kernels supported by the more generic [[https://jupyter.org/][Jupyter]] application framework. Begining with version 4.0 of the IPython kernel the Jupyter console application is actually responsible for the REPL interface. Therefore, depending on the selected or available software the appropriate branch of this repository should be selected.
+*** ~master~ branch for Jupyter with IPython kernel >= 4.0
+   Before installing, you'll need Jupyter (>= 1.0) and the IPython kernel (>= 4.0) installed and
+   working. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[http://jupyter.readthedocs.org/en/latest/install.html][Jupyter]] console and client (~jupyter_console~, ~jupyter_client~) libraries.
+*** ~ipython3~ branch for IPython >=3.0 && < 4.0
+   If you're on IPython 3 you can use the ~ipython3~ branch of this
+   repository. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[https://zeromq.github.io/pyzmq/][PyZMQ]] libraries. These libraries are usually installed as dependecnies of the ipython notebook.
+   
 
    This package is now in MELPA. I recommend installing from there.
    For manual installation, you'll need the following elisp
