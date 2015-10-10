@@ -40,6 +40,7 @@
 (require 's)
 (require 'f)
 (require 'json)
+(require 'python)
 
 ;;; variables
 
@@ -50,7 +51,7 @@
 (defcustom ob-ipython-driver-port 9988
   "Port to use for http driver."
   :group 'ob-ipython)
-  
+
 (defcustom ob-ipython-driver-hostname "localhost"
   "Hostname to use for http driver."
   :group 'ob-ipython)
@@ -144,7 +145,9 @@
 (defun ob-ipython--create-driver ()
   (when (not (ignore-errors (process-live-p (ob-ipython--get-driver-process))))
     (ob-ipython--create-process "ob-ipython-driver"
-                                (list (locate-file (if (eq system-type 'windows-nt) "python.exe" "python")
+                                (list (locate-file (if (eq system-type 'windows-nt)
+                                                       "python.exe"
+                                                     (or python-shell-interpreter "python"))
                                                    exec-path)
                                       ob-ipython-driver-path
                                       (number-to-string ob-ipython-driver-port)))
@@ -191,14 +194,14 @@ a new kernel will be started."
   (let ((url-request-data code)
         (url-request-method "POST"))
     (with-current-buffer (url-retrieve-synchronously
-                          (format "http://%s:%d/execute/%s" 
-                            ob-ipython-driver-hostname
-                            ob-ipython-driver-port
-                            name))
+                          (format "http://%s:%d/execute/%s"
+                                  ob-ipython-driver-hostname
+                                  ob-ipython-driver-port
+                                  name))
       (if (>= (url-http-parse-response) 400)
-    (ob-ipython--dump-error (buffer-string))
-  (goto-char url-http-end-of-headers)
-  (let ((json-array-type 'list))
+          (ob-ipython--dump-error (buffer-string))
+        (goto-char url-http-end-of-headers)
+        (let ((json-array-type 'list))
           (json-read))))))
 
 (defun ob-ipython--extract-output (msgs)
