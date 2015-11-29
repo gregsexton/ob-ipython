@@ -62,6 +62,10 @@
   "Path to the driver script."
   :group 'ob-ipython)
 
+(defcustom ob-ipython-connection-wait 2
+  "Seconds to wait for connections to be established."
+  :group 'ob-ipython)
+
 ;;; utils
 
 (defun ob-ipython--write-base64-string (file b64-string)
@@ -120,11 +124,12 @@
 ;;; process management
 
 (defun ob-ipython--kernel-cmd (name)
-  (-concat (list "ipython" "kernel" (format "--IPKernelApp.connection_file=emacs-%s.json" name))
+  (-concat (list "ipython" "kernel" (format "--IPKernelApp.connection_file=%s.json" name))
            ob-ipython-kernel-extra-args))
 
-(defun ob-ipython--kernel-repl-cmd (name)
-  (list "ipython" "console" "--existing" (format "emacs-%s.json" name)))
+(defun ob-ipython--kernel-repl-cmd (name ssh)
+  (-concat (list "ipython" "console" "--existing" (format "%s.json" name))
+           (if ssh (list "--ssh" ssh))))
 
 (defun ob-ipython--create-process (name cmd)
   (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
@@ -153,14 +158,17 @@
                                       (number-to-string ob-ipython-driver-port)))
     ;; give driver a chance to bind to a port and start serving
     ;; requests. so horrible; so effective.
-    (sleep-for 1)))
+    (sleep-for ob-ipython-connection-wait)))
 
 (defun ob-ipython--get-driver-process ()
   (get-process "ob-ipython-driver"))
 
-(defun ob-ipython--create-repl (name)
-  (run-python (s-join " " (ob-ipython--kernel-repl-cmd name)) nil nil)
-  (format "*%s*" python-shell-buffer-name))
+(defun ob-ipython--create-repl (name ssh)
+  (run-python (s-join " " (ob-ipython--kernel-repl-cmd name ssh)) nil nil)
+  (format "*%s*" python-shell-buffer-name)
+  ;; SSH tunnels take some time to establish and we must wait for the modified
+  ;; connection file to be written for the driver
+  (if ssh (sleep-for ob-ipython-connection-wait)))
 
 ;;; kernel management
 
@@ -297,13 +305,14 @@ a new kernel will be started."
 This function is called by `org-babel-execute-src-block'."
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params)))
+         (ssh (cdr (assoc :ssh params)))
          (result-type (cdr (assoc :result-type params))))
-    (org-babel-ipython-initiate-session session)
+    (org-babel-ipython-initiate-session session params)
     (-when-let (ret (ob-ipython--eval
                      (ob-ipython--execute-request
                       (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                                      params (org-babel-variable-assignments:python params))
-                      (ob-ipython--normalize-session session))))
+                      (ob-ipython--normalize-session (if ssh (concat session "-ssh") session)))))
       (let ((result (cdr (assoc :result ret)))
             (output (cdr (assoc :output ret))))
         (if (eq result-type 'output)
@@ -330,9 +339,11 @@ VARS contains resolved variable references"
   (if (string= session "none")
       (error "ob-ipython currently only supports evaluation using a session.
 Make sure your src block has a :session param.")
-    (ob-ipython--create-driver)
-    (ob-ipython--create-kernel (ob-ipython--normalize-session session))
-    (ob-ipython--create-repl (ob-ipython--normalize-session session))))
+    (let ((ssh (cdr (assoc :ssh params)))
+          (nsession (ob-ipython--normalize-session session)))
+      (if (not ssh) (ob-ipython--create-kernel nsession))
+      (ob-ipython--create-repl nsession ssh)
+      (ob-ipython--create-driver))))
 
 (provide 'ob-ipython)
 

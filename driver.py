@@ -1,8 +1,8 @@
 try:                            # Jupyter and IPython >= 4.0
     import jupyter_client as client
-    find_connection_file = client.find_connection_file
+    client_utils = client
 except ImportError:             # IPython 3
-    from IPython.lib.kernel import find_connection_file
+    import IPython.lib.kernel as client_utils
     import IPython.kernel.blocking.client as client
 
 import sys
@@ -43,7 +43,7 @@ def msg_router(name, ch):
 clients = {}
 
 def create_client(name):
-    cf = find_connection_file('emacs-' + name)
+    cf = client_utils.find_connection_file(name + '.json')
     c = client.BlockingKernelClient(connection_file=cf)
     c.load_connection_file()
     c.start_channels()
@@ -105,8 +105,8 @@ class DebugHandler(tornado.web.RequestHandler):
 
 def make_app():
     return tornado.web.Application([
-        tornado.web.url(r"/execute/(\w+)", ExecuteHandler),
-        tornado.web.url(r"/inspect/(\w+)", InspectHandler),
+        tornado.web.url(r"/execute/(\S+)", ExecuteHandler),
+        tornado.web.url(r"/inspect/(\S+)", InspectHandler),
         tornado.web.url(r"/debug", DebugHandler),
         ])
 

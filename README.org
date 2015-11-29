@@ -154,6 +154,62 @@
      : (2, [['a', 1, 2], ['b', 2, 3], ['c', 3, 4]])
    #+END_SRC
 
+*** SSH connection to remote kernels
+
+It is possible to connect to a remote kernel running on some server to which SSH
+tunnels can be created. Usually the kernel process is started in a terminal
+multiplexer like =screen= or =tmux= to keep it running after disconnecting. When
+a kernel is started on the remote server using the following command
+
+#+BEGIN_SRC sh
+ipython kernel
+#+END_SRC
+
+The name of the connection file for later use with the =--existing= option of
+=ipython= is printed out. By default has the form =kernel-${PID}.json=, but a
+custom name can be specified with
+
+#+BEGIN_SRC sh
+ipython kernel --IPKernelApp.connection_file=${custom_name}.json
+#+END_SRC
+
+The connection file is written in the runtime directory on the server when using
+Jupyter (IPython >= 4.0) which is usually =/run/user/${UID}/jupyter/= or falls
+back to =${HOME}/.local/share/jupyter/runtime/=. The exact location can be found
+on the server with
+
+#+BEGIN_SRC sh
+python -c "from jupyter_core.paths import jupyter_runtime_dir as p; print(p())"
+#+END_SRC
+
+When using the older IPython < 4.0, the connection file is written in the
+=security/= subdirectory of the current profile, e.g.
+=$HOME/.ipython/profile_default/security/= with the default profile. The profile
+directory can also be found with =ipython locate=.
+
+
+The connection contains connection information (secret hash, ports) and has to
+be transferred from the server to the appropriate directory on the client
+machine, e.g. with the standard runtime directory with Jupyter it could be
+
+#+BEGIN_SRC sh
+scp server:/run/user/\$UID/jupyter/${connnection_file} /run/user/$UID/jupyter 
+#+END_SRC
+
+The backslash before the first =$= makes sure the user id on the server is used
+in the source path.
+
+Finally, the remote session can be connected through specifying both of the
+following arguments in the source blocks:
+- =:session ${connection_file_basename}= :: Will be used to find the
+     connection file, specified without the =.json= extension.
+- =:ssh ${server_name_or_ip}= :: Will be passed to the =--ssh= option of
+     =ipython console= which will establish needed SSH tunnels (nothing more, no
+     shell session is created) and write a modified connection file (that is
+     handled internally). It is best to have SSH configured in such a way that
+     the user does not have to be specified (option =User= in ssh configuration)
+     and possibly password-less login through SSH keys (option =IdentityFile= in
+     ssh configuration).
 ** What features are there outside of Org SRC block evaluation?
 
    * You can ask the running IPython kernel for documentation. Open a
@@ -211,6 +267,15 @@
 
    * Open a REPL using =C-c C-v C-z= so that you get completion in Python buffers.
 
+   * The source block header arguments can be set as a special  property
+
+#+BEGIN_SRC org
+#+PROPERTY: header-args:ipython :session kernel_name :ssh remote_server
+#+END_SRC
+ and then they don't have to be specified for each cell, they are used during
+ execution automatically. However, they are set only after (re)loading the Org
+ file or by =C-c C-c= on this line.
+
 ** Help, it doesn't work
 
    First thing to do is check that you have all of the required
@@ -218,3 +283,12 @@
    project's issues, so take a look there to see if your problem has a
    quick fix. Otherwise feel free to cut an issue - I'll do my best to
    help.
+*** Errors during and/or long session start-up
+This is because it takes a few seconds for the driver server process to bind to
+a port and the REPL to connect to the kernel and possibly establishing SSH
+tunnels. Executing code before the session is fully established can result in
+errors. Because there is no simple way (to the best knowledge of the authors) to
+find out when the session is fully established, the code execution is postponed
+by several seconds. This waiting period can be customized by the
+`ob-ipython-connection-wait` variable in case it is too short or needlessly
+long.
