@@ -119,19 +119,18 @@
 
 ;;; process management
 
-(defun ob-ipython--kernel-cmd (name)
-  (-concat (list "ipython" "kernel" (format "--IPKernelApp.connection_file=emacs-%s.json" name))
-           ob-ipython-kernel-extra-args))
-
 (defun ob-ipython--kernel-repl-cmd (name)
   (list "ipython" "console" "--existing" (format "emacs-%s.json" name)))
 
 (defun ob-ipython--create-process (name cmd)
   (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
 
-(defun ob-ipython--create-kernel (name)
+(defun ob-ipython--create-kernel-driver (name &optional kernel)
   (when (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
-    (ob-ipython--create-process (format "kernel-%s" name) (ob-ipython--kernel-cmd name))))
+    (apply 'ob-ipython--launch-driver
+	     (append (list (format "kernel-%s" name))
+		     (list "--conn-file" (format "emacs-%s.json" name))
+		     (if kernel (list "--kernel" kernel) '())))))
 
 (defun ob-ipython--get-kernel-processes ()
   (let ((procs (-filter (lambda (p)
@@ -142,21 +141,25 @@
                 procs)
           procs)))
 
-(defun ob-ipython--create-driver ()
+(defun ob-ipython--launch-driver (name &rest args)
+  (let* ((python (locate-file (if (eq system-type 'windows-nt)
+				  "python.exe"
+				(or python-shell-interpreter "python")) exec-path))
+	 (pargs (append (list python ob-ipython-driver-path) args)))
+    (ob-ipython--create-process name pargs)
+    ;; give kernel time to initialize and write connection file
+    (sleep-for 1)))
+
+(defun ob-ipython--create-client-driver ()
   (when (not (ignore-errors (process-live-p (ob-ipython--get-driver-process))))
-    (ob-ipython--create-process "ob-ipython-driver"
-                                (list (locate-file (if (eq system-type 'windows-nt)
-                                                       "python.exe"
-                                                     (or python-shell-interpreter "python"))
-                                                   exec-path)
-                                      ob-ipython-driver-path
-                                      (number-to-string ob-ipython-driver-port)))
+    (ob-ipython--launch-driver "client-driver" "--port"
+			       (number-to-string ob-ipython-driver-port))
     ;; give driver a chance to bind to a port and start serving
     ;; requests. so horrible; so effective.
     (sleep-for 1)))
 
 (defun ob-ipython--get-driver-process ()
-  (get-process "ob-ipython-driver"))
+  (get-process "client-driver"))
 
 (defun ob-ipython--create-repl (name)
   (run-python (s-join " " (ob-ipython--kernel-repl-cmd name)) nil nil)
@@ -298,7 +301,7 @@ This function is called by `org-babel-execute-src-block'."
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params)))
          (result-type (cdr (assoc :result-type params))))
-    (org-babel-ipython-initiate-session session)
+    (org-babel-ipython-initiate-session session params)
     (-when-let (ret (ob-ipython--eval
                      (ob-ipython--execute-request
                       (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
@@ -330,9 +333,10 @@ VARS contains resolved variable references"
   (if (string= session "none")
       (error "ob-ipython currently only supports evaluation using a session.
 Make sure your src block has a :session param.")
-    (ob-ipython--create-driver)
-    (ob-ipython--create-kernel (ob-ipython--normalize-session session))
-    (ob-ipython--create-repl (ob-ipython--normalize-session session))))
+  (ob-ipython--create-client-driver)
+  (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
+				    (cdr (assoc :kernel params)))
+  (ob-ipython--create-repl (ob-ipython--normalize-session session))))
 
 (provide 'ob-ipython)
 
