@@ -1,8 +1,3 @@
-try:
-    from Queue import Queue
-except ImportError: # Python 3
-    from queue import Queue
-
 try:                            # Jupyter and IPython >= 4.0
     import jupyter_client as client
     from jupyter_client import KernelManager
