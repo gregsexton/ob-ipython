@@ -7,6 +7,12 @@ def sepjoin(sep, *lists):
     tojoin = zip(*lists)
     return [form.format(*line) for line in tojoin]
 
+# A Lof of code here is borrowed from pandas (http://pandas.pydata.org/)
+# The BSD license of it can be found in the LICENSE directory
+# ---
+# Copyright (c) 2012, PyData Development Team
+# All rights reserved.
+
 class DFOrgFormatter(DataFrameFormatter):
     def _get_formatted_index_org(self, frame):
         # Taken from DataFrameFormatter to remove join of index
@@ -65,6 +71,7 @@ class DFOrgFormatter(DataFrameFormatter):
                     cols[ind_nlevels] = "<"+cols[ind_nlevels][1:]
                     buf.write("| " + " | ".join(cols) + " |\n")
             buf.write("| " + row + " |\n")
+# ---
 
 def to_org(frame, **kwds):
     formatter = DFOrgFormatter(frame, **kwds)
