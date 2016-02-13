@@ -63,15 +63,19 @@
   :group 'ob-ipython)
 
 ;;; utils
-
-(defun ob-ipython--write-base64-string (file b64-string)
-  (if b64-string
+(defun ob-ipython--write-string-to-file (file string &optional filters)
+  (if string
       (with-temp-buffer
-        (insert b64-string)
-        (base64-decode-region (point-min) (point-max))
+        (insert string)
+        (mapc 'funcall filters)
         (let ((require-final-newline nil))
           (write-file file)))
     (error "No output was produced to write to a file.")))
+
+(defun ob-ipython--write-base64-string (file b64-string)
+  (ob-ipython--write-string-to-file file
+                                    b64-string
+                                    '((lambda () (base64-decode-region (point-min) (point-max))))))
 
 (defun ob-ipython--create-traceback-buffer (traceback)
   (let ((buf (get-buffer-create "*ob-ipython-traceback*")))
@@ -311,6 +315,8 @@ This function is called by `org-babel-execute-src-block'."
           (ob-ipython--create-stdout-buffer output)
           (cond ((and file (string= (f-ext file) "png"))
                  (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+                ((and file (string= (f-ext file) "svg"))
+                 (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
                 (file (error "%s is currently an unsupported file extension." (f-ext file)))
                 (t (->> result (assoc 'text/plain) cdr))))))))
 
