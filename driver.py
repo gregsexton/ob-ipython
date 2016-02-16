@@ -42,7 +42,7 @@ def get_handler(msg):
         return ignore
     with handlers_cond:
         for i in range(20):
-            if not handlers.has_key(msgid):
+            if not msgid in handlers:
                 handlers_cond.wait(timeout=0.05*i)
             else:
                 break
@@ -88,7 +88,8 @@ def handler(webhandler, msgid, msg, msgs):
         webhandler.set_header("Content-Type", "application/json")
         def accept(msg):
             return not msg['msg_type'] in ['status', 'execute_input']
-        webhandler.write(json.dumps(filter(accept, msgs), default=str))
+        webhandler.write(json.dumps([m for m in msgs if accept(m)],
+                                    default=str))
         webhandler.finish()
 
 class ExecuteHandler(tornado.web.RequestHandler):
@@ -157,7 +158,7 @@ def main(args):
         manager.start_kernel()
         try:
             semaphore.acquire()
-	except KeyboardInterrupt: pass
+        except KeyboardInterrupt: pass
         manager.shutdown_kernel()
     else:
         app = make_app()
