@@ -70,7 +70,7 @@
         (insert b64-string)
         (base64-decode-region (point-min) (point-max))
         (let ((require-final-newline nil))
-          (write-file file)))
+          (write-region (point-min) (point-max) file)))
     (error "No output was produced to write to a file.")))
 
 (defun ob-ipython--create-traceback-buffer (traceback)
