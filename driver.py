@@ -1,12 +1,18 @@
 try:                            # Jupyter and IPython >= 4.0
     import jupyter_client as client
+    from jupyter_client import KernelManager
     find_connection_file = client.find_connection_file
+    from jupyter_core.paths import jupyter_runtime_dir as runtime_dir
 except ImportError:             # IPython 3
     from IPython.lib.kernel import find_connection_file
     import IPython.kernel.blocking.client as client
+    from IPython.kernel.manager import KernelManager
+    runtime_dir = None
+    from IPython.utils.path import get_ipython_dir
+    from IPython.core.profiledir import ProfileDir
 
-import sys
-import threading
+import sys, signal, argparse, os.path
+import threading, multiprocessing
 
 import pprint
 import json
@@ -18,20 +24,30 @@ import tornado.web
 # handling around stuff, with proper http response, status code etc
 
 handlers = {}
+handlers_cond = threading.Condition()
 
-def install_handlers(msgid, acc, finalizer):
-    handlers[msgid] = (acc, finalizer)
+def install_handler(msgid, handler):
+    with handlers_cond:
+        handlers[msgid] = handler
+        handlers_cond.notify(n=3)
 
-def remove_handlers(msgid):
-    del handlers[msgid]
+def remove_handler(msgid):
+    with handlers_cond:
+        del handlers[msgid]
 
 def get_handler(msg):
     def ignore(msg): pass
-    acc, final = handlers.get(msg['parent_header']['msg_id'], (ignore, ignore))
-    msg_type = msg.get('msg_type', '')
-    if msg_type in ['execute_reply', 'inspect_reply']:
-        return final
-    return acc
+    msgid = msg['parent_header'].get('msg_id', None)
+    if not msgid:
+        return ignore
+    with handlers_cond:
+        for i in range(20):
+            if not msgid in handlers:
+                handlers_cond.wait(timeout=0.05*i)
+            else:
+                break
+        onmsg = handlers.get(msgid, ignore)
+    return onmsg
 
 def msg_router(name, ch):
     while True:
@@ -58,45 +74,43 @@ def get_client(name):
         clients[name] = create_client(name)
     return clients[name]
 
+def handler(webhandler, msgid, msg, msgs):
+    msgs.append(msg)
+    hasreply, hasidle = False, False
+    for msg in msgs:
+        if msg.get('msg_type', '') in ['execute_reply', 'inspect_reply']:
+            hasreply = True
+        elif (msg.get('msg_type', '') == 'status' and
+              msg['content']['execution_state'] == 'idle'):
+            hasidle = True
+    if hasreply and hasidle:
+        remove_handler(msgid)
+        webhandler.set_header("Content-Type", "application/json")
+        def accept(msg):
+            return not msg['msg_type'] in ['status', 'execute_input']
+        webhandler.write(json.dumps([m for m in msgs if accept(m)],
+                                    default=str))
+        webhandler.finish()
+
 class ExecuteHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def post(self, name):
         msgs = []
-        def acc_msg(msg):
-            msgs.append(msg)
-
-        def finalize(msg):
-            msgs.append(msg)
-            remove_handlers(msgid)
-            self.set_header("Content-Type", "application/json")
-            self.write(json.dumps(msgs, default=str))
-            self.finish()
-
         c = get_client(name)
         msgid = c.execute(self.request.body.decode("utf-8"), allow_stdin=False)
-        install_handlers(msgid, acc_msg, finalize)
+        install_handler(msgid, lambda msg: handler(self, msgid, msg, msgs))
 
 class InspectHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def post(self, name):
         msgs = []
-        def acc_msg(msg):
-            msgs.append(msg)
-
-        def finalize(msg):
-            msgs.append(msg)
-            remove_handlers(msgid)
-            self.set_header("Content-Type", "application/json")
-            self.write(json.dumps(msgs, default=str))
-            self.finish()
-
         req = json.loads(self.request.body.decode("utf-8"))
         code = req['code']
         c = get_client(name)
         msgid = c.inspect(code,
                           cursor_pos=req.get('pos', len(code)),
                           detail_level=req.get('detail', 0))
-        install_handlers(msgid, acc_msg, finalize)
+        install_handler(msgid, lambda msg: handler(self, msgid, msg, msgs))
 
 class DebugHandler(tornado.web.RequestHandler):
     def get(self):
@@ -111,10 +125,45 @@ def make_app():
         ])
 
 def main(args):
-    app = make_app()
-    # TODO: parse args properly
-    app.listen(args[1])
-    tornado.ioloop.IOLoop.current().start()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int)
+    parser.add_argument('--kernel')
+    parser.add_argument('--conn-file')
+    args = parser.parse_args()
+    if args.conn_file:
+        if runtime_dir:
+            conn_file = (args.conn_file if os.path.isabs(args.conn_file)
+                         else os.path.join(runtime_dir(), args.conn_file))
+        else: # IPython 3
+            pd = ProfileDir.find_profile_dir_by_name(get_ipython_dir(), 'default')
+            conn_file = os.path.join(pd.security_dir, args.conn_file)
+        kwargs = {'connection_file': conn_file}
+        if args.kernel:
+            kwargs['kernel_name'] = args.kernel
+        manager = KernelManager(**kwargs)
+
+        semaphore = multiprocessing.Semaphore()
+        semaphore.acquire()
+        def onsignal(*args):
+            semaphore.release()
+        signal.signal(signal.SIGTERM, onsignal)
+        import platform
+        if platform.system() == 'Windows':
+            signal.signal(signal.SIGBREAK, onsignal)
+        else:
+            signal.signal(signal.SIGQUIT, onsignal)
+            # Emacs sends SIGHUP upon exit
+            signal.signal(signal.SIGHUP, onsignal)
+
+        manager.start_kernel()
+        try:
+            semaphore.acquire()
+        except KeyboardInterrupt: pass
+        manager.shutdown_kernel()
+    else:
+        app = make_app()
+        app.listen(args.port)
+        tornado.ioloop.IOLoop.current().start()
 
 if __name__ == '__main__':
     main(sys.argv)
