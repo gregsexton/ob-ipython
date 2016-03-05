@@ -67,9 +67,10 @@
 (defun ob-ipython--write-base64-string (file b64-string)
   (if b64-string
       (with-temp-buffer
-        (insert b64-string)
-        (base64-decode-region (point-min) (point-max))
-        (let ((require-final-newline nil))
+        (let ((buffer-file-coding-system 'binary)
+              (require-final-newline nil))
+          (insert b64-string)
+          (base64-decode-region (point-min) (point-max))
           (write-file file)))
     (error "No output was produced to write to a file.")))
 
