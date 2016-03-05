@@ -138,6 +138,13 @@
      ,#+END_SRC
    #+END_SRC
 
+   In order to make a svg graphic rather than png, you may specify the
+   output format globally to IPython.
+
+   #+BEGIN_EXAMPLE
+     %config InlineBackend.figure_format = 'svg'
+   #+END_EXAMPLE
+
    ob-ipython supports providing variables and even tables to code.
 
    #+BEGIN_SRC org

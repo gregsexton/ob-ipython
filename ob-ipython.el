@@ -64,6 +64,14 @@
 
 ;;; utils
 
+(defun ob-ipython--write-string-to-file (file string)
+  (if string
+      (with-temp-buffer
+        (let ((require-final-newline nil))
+          (insert string)
+          (write-file file)))
+    (error "No output was produced to write to a file.")))
+
 (defun ob-ipython--write-base64-string (file b64-string)
   (if b64-string
       (with-temp-buffer
@@ -312,6 +320,8 @@ This function is called by `org-babel-execute-src-block'."
           (ob-ipython--create-stdout-buffer output)
           (cond ((and file (string= (f-ext file) "png"))
                  (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+                ((and file (string= (f-ext file) "svg"))
+                 (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
                 (file (error "%s is currently an unsupported file extension." (f-ext file)))
                 (t (->> result (assoc 'text/plain) cdr))))))))
 
