@@ -1,0 +1,24 @@
+#+BEGIN_SRC ipython :session
+  import pandas as pd
+  import df_to_org
+  df_to_org.register_orgformatter()
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC ipython :session :results value
+df2 = pd.DataFrame({ 'A' : 1.,
+                     'B' : pd.Timestamp('20130202'),
+                     'C' : pd.Series(range(1,5),index=list(range(4)),dtype='float32'),
+                     'F' : 'foo' })
+df2
+#+END_SRC
+
+#+RESULTS:
+|   | A |          B | C | F   |
+|---+---+------------+---+-----|
+| / | < |            |   |     |
+| 0 | 1 | 2013-02-02 | 1 | foo |
+| 1 | 1 | 2013-02-02 | 2 | foo |
+| 2 | 1 | 2013-02-02 | 3 | foo |
+| 3 | 1 | 2013-02-02 | 4 | foo |
