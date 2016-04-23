@@ -137,9 +137,9 @@
 (defun ob-ipython--create-kernel-driver (name &optional kernel)
   (when (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
     (apply 'ob-ipython--launch-driver
-	     (append (list (format "kernel-%s" name))
-		     (list "--conn-file" (format "emacs-%s.json" name))
-		     (if kernel (list "--kernel" kernel) '())))))
+           (append (list (format "kernel-%s" name))
+                   (list "--conn-file" (format "emacs-%s.json" name))
+                   (if kernel (list "--kernel" kernel) '())))))
 
 (defun ob-ipython--get-kernel-processes ()
   (let ((procs (-filter (lambda (p)
@@ -152,9 +152,9 @@
 
 (defun ob-ipython--launch-driver (name &rest args)
   (let* ((python (locate-file (if (eq system-type 'windows-nt)
-				  "python.exe"
-				(or python-shell-interpreter "python")) exec-path))
-	 (pargs (append (list python ob-ipython-driver-path) args)))
+                                  "python.exe"
+                                (or python-shell-interpreter "python")) exec-path))
+         (pargs (append (list python ob-ipython-driver-path) args)))
     (ob-ipython--create-process name pargs)
     ;; give kernel time to initialize and write connection file
     (sleep-for 1)))
@@ -344,10 +344,10 @@ VARS contains resolved variable references"
   (if (string= session "none")
       (error "ob-ipython currently only supports evaluation using a session.
 Make sure your src block has a :session param.")
-  (ob-ipython--create-client-driver)
-  (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
-				    (cdr (assoc :kernel params)))
-  (ob-ipython--create-repl (ob-ipython--normalize-session session))))
+    (ob-ipython--create-client-driver)
+    (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
+                                      (cdr (assoc :kernel params)))
+    (ob-ipython--create-repl (ob-ipython--normalize-session session))))
 
 (provide 'ob-ipython)
 
