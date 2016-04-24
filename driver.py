@@ -24,30 +24,24 @@ import tornado.web
 # handling around stuff, with proper http response, status code etc
 
 handlers = {}
-handlers_cond = threading.Condition()
+
+# protect against the race condition where a result can be returned
+# before a handler is installed
+install_handler_lock = threading.Lock()
 
 def install_handler(msgid, handler):
-    with handlers_cond:
-        handlers[msgid] = handler
-        handlers_cond.notify(n=3)
+    handlers[msgid] = handler
 
 def remove_handler(msgid):
-    with handlers_cond:
-        del handlers[msgid]
+    del handlers[msgid]
 
 def get_handler(msg):
     def ignore(msg): pass
-    msgid = msg['parent_header'].get('msg_id', None)
-    if not msgid:
-        return ignore
-    with handlers_cond:
-        for i in range(20):
-            if not msgid in handlers:
-                handlers_cond.wait(timeout=0.05*i)
-            else:
-                break
-        onmsg = handlers.get(msgid, ignore)
-    return onmsg
+    with install_handler_lock:
+        msgid = msg['parent_header'].get('msg_id', None)
+        if not msgid:
+            return ignore
+        return handlers.get(msgid, ignore)
 
 def msg_router(name, ch):
     while True:
@@ -74,31 +68,34 @@ def get_client(name):
         clients[name] = create_client(name)
     return clients[name]
 
-def handler(webhandler, msgid, msg, msgs):
-    msgs.append(msg)
-    hasreply, hasidle = False, False
-    for msg in msgs:
+def handler(webhandler, msgid):
+    msgs = []
+    hasreply, hasidle = [False], [False] # hack to allow closing over these variables
+    def f(msg):
+        msgs.append(msg)
         if msg.get('msg_type', '') in ['execute_reply', 'inspect_reply']:
-            hasreply = True
+            hasreply[0] = True
         elif (msg.get('msg_type', '') == 'status' and
-              msg['content']['execution_state'] == 'idle'):
-            hasidle = True
-    if hasreply and hasidle:
-        remove_handler(msgid)
-        webhandler.set_header("Content-Type", "application/json")
-        def accept(msg):
-            return not msg['msg_type'] in ['status', 'execute_input']
-        webhandler.write(json.dumps([m for m in msgs if accept(m)],
-                                    default=str))
-        webhandler.finish()
+            msg['content']['execution_state'] == 'idle'):
+            hasidle[0] = True
+        if hasreply[0] and hasidle[0]:
+            remove_handler(msgid)
+            webhandler.set_header("Content-Type", "application/json")
+            def accept(msg):
+                return not msg['msg_type'] in ['status', 'execute_input']
+            webhandler.write(json.dumps([m for m in msgs if accept(m)],
+                                        default=str))
+            webhandler.finish()
+    return f
 
 class ExecuteHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def post(self, name):
         msgs = []
         c = get_client(name)
-        msgid = c.execute(self.request.body.decode("utf-8"), allow_stdin=False)
-        install_handler(msgid, lambda msg: handler(self, msgid, msg, msgs))
+        with install_handler_lock:
+            msgid = c.execute(self.request.body.decode("utf-8"), allow_stdin=False)
+            install_handler(msgid, handler(self, msgid))
 
 class InspectHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
@@ -107,10 +104,11 @@ class InspectHandler(tornado.web.RequestHandler):
         req = json.loads(self.request.body.decode("utf-8"))
         code = req['code']
         c = get_client(name)
-        msgid = c.inspect(code,
-                          cursor_pos=req.get('pos', len(code)),
-                          detail_level=req.get('detail', 0))
-        install_handler(msgid, lambda msg: handler(self, msgid, msg, msgs))
+        with install_handler_lock:
+            msgid = c.inspect(code,
+                            cursor_pos=req.get('pos', len(code)),
+                            detail_level=req.get('detail', 0))
+            install_handler(msgid, handler(self, msgid))
 
 class DebugHandler(tornado.web.RequestHandler):
     def get(self):
