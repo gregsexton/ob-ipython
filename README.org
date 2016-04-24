@@ -2,8 +2,8 @@
 
 ** What is this?
 
-   An Emacs library that allows Org mode to evaluate Python code
-   blocks using an IPython kernel.
+   An Emacs library that allows Org mode to evaluate code blocks using
+   a Jupyter kernel (Python by default).
 
 *** Why not use IPython notebook?
 
@@ -144,6 +144,23 @@
    #+BEGIN_EXAMPLE
      %config InlineBackend.figure_format = 'svg'
    #+END_EXAMPLE
+
+   If you wish to use a specific Jupyter kernel, you may pass the
+   kernel option. This enables you to use ob-ipython with languages
+   other than Python. You need to have the Jupyter kernel installed
+   and working before you can use this.
+
+   When mixing code from different languages you will need to make use
+   of the session argument.
+
+   #+BEGIN_SRC org
+     ,#+BEGIN_SRC ipython :session :kernel clojure
+       (+ 1 2)
+     ,#+END_SRC
+
+     ,#+RESULTS:
+     : 3
+   #+END_SRC
 
    ob-ipython supports providing variables and even tables to code.
 
