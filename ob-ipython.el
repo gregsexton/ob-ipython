@@ -62,6 +62,11 @@
   "Path to the driver script."
   :group 'ob-ipython)
 
+(defcustom ob-ipython-command
+  "ipython"
+  "Command to launch ipython. Usually ipython or jupyter."
+  :group 'ob-ipython)
+
 ;;; utils
 
 (defun ob-ipython--write-string-to-file (file string)
@@ -129,7 +134,7 @@
 ;;; process management
 
 (defun ob-ipython--kernel-repl-cmd (name)
-  (list "ipython" "console" "--existing" (format "emacs-%s.json" name)))
+  (list ob-ipython-command "console" "--existing" (format "emacs-%s.json" name)))
 
 (defun ob-ipython--create-process (name cmd)
   (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
