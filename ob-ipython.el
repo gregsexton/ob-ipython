@@ -154,7 +154,8 @@
   (let* ((python (locate-file (if (eq system-type 'windows-nt)
                                   "python.exe"
                                 (or python-shell-interpreter "python")) exec-path))
-         (pargs (append (list python ob-ipython-driver-path) args)))
+	 ;; we add " -- " before args to python-shell-interpreter, otherwise, if python-shell-interpreter is ipython, ipython itself will attempt to parse the driver.py command line args and error out
+         (pargs (append (list python "--" ob-ipython-driver-path) args)))
     (ob-ipython--create-process name pargs)
     ;; give kernel time to initialize and write connection file
     (sleep-for 1)))
