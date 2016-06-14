@@ -127,7 +127,10 @@ def main(args):
     parser.add_argument('--port', type=int)
     parser.add_argument('--kernel')
     parser.add_argument('--conn-file')
+
+    parser.add_argument('positional', nargs='*')
     args = parser.parse_args()
+    extra_arguments = args.positional
     if args.conn_file:
         if runtime_dir:
             conn_file = (args.conn_file if os.path.isabs(args.conn_file)
@@ -153,7 +156,7 @@ def main(args):
             # Emacs sends SIGHUP upon exit
             signal.signal(signal.SIGHUP, onsignal)
 
-        manager.start_kernel()
+        manager.start_kernel(extra_arguments=extra_arguments)
         try:
             semaphore.acquire()
         except KeyboardInterrupt: pass
