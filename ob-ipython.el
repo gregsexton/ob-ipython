@@ -129,7 +129,11 @@
 ;;; process management
 
 (defun ob-ipython--kernel-repl-cmd (name)
-  (list "ipython" "console" "--existing" (format "emacs-%s.json" name)))
+  (let ((conn-json
+         (if (s-ends-with-p ".json" name)
+             name
+           (format "emacs-%s.json" name))))
+    (list "ipython" "console" "--existing" conn-json)))
 
 (defun ob-ipython--create-process (name cmd)
   (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
@@ -345,8 +349,9 @@ VARS contains resolved variable references"
       (error "ob-ipython currently only supports evaluation using a session.
 Make sure your src block has a :session param.")
     (ob-ipython--create-client-driver)
-    (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
-                                      (cdr (assoc :kernel params)))
+    (when (not (s-ends-with-p ".json" session))
+      (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
+                                        (cdr (assoc :kernel params))))
     (ob-ipython--create-repl (ob-ipython--normalize-session session))))
 
 (provide 'ob-ipython)
