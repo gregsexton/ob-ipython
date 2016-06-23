@@ -104,6 +104,8 @@
 
    This is the most basic ipython block. You *must* provide a session
    argument. You can name the session if you wish to separate state.
+   You can also pass an connection json of existing ipython session
+   as a session name in order to connect to it.
 
    #+BEGIN_SRC org
      ,#+BEGIN_SRC ipython :session
