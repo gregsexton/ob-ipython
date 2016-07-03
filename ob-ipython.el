@@ -158,8 +158,8 @@
 (defun ob-ipython--launch-driver (name &rest args)
   (let* ((python (locate-file (if (eq system-type 'windows-nt)
                                   "python.exe"
-                                (or python-shell-interpreter "python")) exec-path))
-	 ;; we add " -- " before args to python-shell-interpreter, otherwise, if python-shell-interpreter is ipython, ipython itself will attempt to parse the driver.py command line args and error out
+                                (or python-shell-interpreter "python"))
+                              exec-path))
          (pargs (append (list python "--" ob-ipython-driver-path) args)))
     (ob-ipython--create-process name pargs)
     ;; give kernel time to initialize and write connection file
@@ -168,7 +168,7 @@
 (defun ob-ipython--create-client-driver ()
   (when (not (ignore-errors (process-live-p (ob-ipython--get-driver-process))))
     (ob-ipython--launch-driver "client-driver" "--port"
-			       (number-to-string ob-ipython-driver-port))
+                               (number-to-string ob-ipython-driver-port))
     ;; give driver a chance to bind to a port and start serving
     ;; requests. so horrible; so effective.
     (sleep-for 1)))
@@ -275,8 +275,8 @@ a new kernel will be started."
     (with-current-buffer (url-retrieve-synchronously
                           ;; TODO: hardcoded the default session here
                           (format "http://%s:%d/inspect/default"
-                            ob-ipython-driver-hostname
-                            ob-ipython-driver-port))
+                                  ob-ipython-driver-hostname
+                                  ob-ipython-driver-port))
       (if (>= (url-http-parse-response) 400)
           (ob-ipython--dump-error (buffer-string))
         (goto-char url-http-end-of-headers)
@@ -296,8 +296,8 @@ a new kernel will be started."
   "Ask a kernel for documentation on the thing at POS in BUFFER."
   (interactive (list (current-buffer) (point)))
   (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
-    (ob-ipython--create-inspect-buffer result)
-  (message "No documentation was found.")))
+      (ob-ipython--create-inspect-buffer result)
+    (message "No documentation was found.")))
 
 ;;; babel framework
 
