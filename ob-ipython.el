@@ -332,7 +332,14 @@ This function is called by `org-babel-execute-src-block'."
                 ((and file (string= (f-ext file) "svg"))
                  (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
                 (file (error "%s is currently an unsupported file extension." (f-ext file)))
-                (t (->> result (assoc 'text/plain) cdr))))))))
+                (t (->> result (assoc 'text/plain) cdr ob-ipython--table-or-string))))))))
+
+(defun ob-ipython--table-or-string (results)
+  "Extract an Org table from RESULTS if it looks like it might be
+a table."
+  (if (null results)
+      results
+    (org-babel-python-table-or-string results)))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
