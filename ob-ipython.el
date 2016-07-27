@@ -345,13 +345,14 @@ a new kernel will be started."
     (if orig-org-src-lang-mode
         (let ((new-org-src-lang-mode `(,(format "jupyter-%S"
                                            (intern (car orig-org-src-lang-mode))) .
-                                           ,(cdr orig-org-src-lang-mode)))))
+                                           ,(cdr orig-org-src-lang-mode))))
+          (add-to-list 'org-src-lang-modes new-org-src-lang-mode))
       (let ((new-org-src-lang-mode `(,(format "jupyter-%S"
                                         (intern language)) .
                                         ,(intern (replace-regexp-in-string
-                                                 "[0-9]" ""
-                                                 kernel)))))))
-    (add-to-list 'org-src-lang-modes 'new-org-src-lang-mode)))
+                                                 "[0-9]*" ""
+                                                 language)))))
+        (add-to-list 'org-src-lang-modes new-org-src-lang-mode)))))
 
 (defun ob-ipython-auto-configure-kernels (&optional replace)
   "Detects jupyter kernels installed on your system and configures them for use in org-babel.
