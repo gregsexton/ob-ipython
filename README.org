@@ -94,7 +94,16 @@
     * https://github.com/magnars/s.el
     * https://github.com/rejeep/f.el
 
-    Then just drop this somewhere in your load path and ~(require 'ob-ipython)~.
+    Then just drop this somewhere in your load path and ~(require
+    'ob-ipython)~. Also active ~ipython~ languages in Org-Babel:
+
+    #+BEGIN_SRC emacs-lisp
+      (org-babel-do-load-languages
+       'org-babel-load-languages
+       '((ipython . t)
+        ;(... other languages . t)
+         ))
+    #+END_SRC
 
 ** How do I use it?
 
