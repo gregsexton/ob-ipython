@@ -95,13 +95,13 @@
     * https://github.com/rejeep/f.el
 
     Then just drop this somewhere in your load path and ~(require
-    'ob-ipython)~. Also active ~ipython~ languages in Org-Babel:
+    'ob-ipython)~. Lastly, activate ~ipython~ in Org-Babel:
 
     #+BEGIN_SRC emacs-lisp
       (org-babel-do-load-languages
        'org-babel-load-languages
        '((ipython . t)
-        ;(... other languages . t)
+         ;; other languages..
          ))
     #+END_SRC
 
