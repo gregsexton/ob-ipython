@@ -265,6 +265,23 @@ a new kernel will be started."
           ((string= "abort" status) (error "Kernel execution aborted."))
           ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
 
+
+(defun ob-ipython--eval-async (service-response tfile)
+  (let ((status (ob-ipython--extract-status service-response)))
+    (cond ((string= "ok" status) `((:result . ,(ob-ipython--extract-result service-response))
+                                   (:output . ,(ob-ipython--extract-output service-response))))
+          ((string= "abort" status) (progn
+                                      ;; (clear-async-last)
+                                      (clear-async-list-on-error tfile)
+                                      (error "Kernel execution aborted.")
+                                      ))
+          ((string= "error" status) (progn
+                                      ;; (clear-async-last)
+                                      (clear-async-list-on-error tfile)
+                                      (error (ob-ipython--extract-error service-response))
+                                      )))))
+
+
 ;;; inspection
 
 (defun ob-ipython--inspect-request (code &optional pos detail)
@@ -310,29 +327,54 @@ a new kernel will be started."
       (error "default is reserved for when no name is provided. Please use a different session name.")
     (or session "default")))
 
+
+;; Code for both sync and async
+(setq async-list ())
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
-  (let* ((file (cdr (assoc :file params)))
-         (session (cdr (assoc :session params)))
-         (result-type (cdr (assoc :result-type params))))
-    (org-babel-ipython-initiate-session session params)
-    (-when-let (ret (ob-ipython--eval
-                     (ob-ipython--execute-request
-                      (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
-                                                     params (org-babel-variable-assignments:python params))
-                      (ob-ipython--normalize-session session))))
-      (let ((result (cdr (assoc :result ret)))
-            (output (cdr (assoc :output ret))))
-        (if (eq result-type 'output)
-            output
-          (ob-ipython--create-stdout-buffer output)
-          (cond ((and file (string= (f-ext file) "png"))
-                 (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+
+  (if (cdr (assoc :async params))
+      (let* ((current-file (buffer-file-name))
+             (code (org-element-property :value (org-element-context)))
+             (temporary-file-directory ".")
+             (tempfile (make-temp-file "py-"))
+             (file (cdr (assoc :async-file params))) ;; use async-file instead of file
+             (session (cdr (assoc :session params)))
+             (result-type (cdr (assoc :result-type params)))
+             )
+        (org-babel-remove-result)
+        (setq async-list (cons tempfile (cons (buffer-file-name) (cons result-type (cons file async-list)))))
+        ;; (org-babel-ipython-initiate-session session)
+        (ob-ipython-async--execute-request
+         (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
+                                        params (org-babel-variable-assignments:python params))
+         (ob-ipython--normalize-session session)
+         tempfile
+         )
+        tempfile
+        )
+    (let* ((file (cdr (assoc :file params)))
+           (session (cdr (assoc :session params)))
+           (result-type (cdr (assoc :result-type params))))
+      (org-babel-ipython-initiate-session session params)
+      (-when-let (ret (ob-ipython--eval
+                       (ob-ipython--execute-request
+                        (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
+                                                       params (org-babel-variable-assignments:python params))
+                        (ob-ipython--normalize-session session))))
+        (let ((result (cdr (assoc :result ret)))
+              (output (cdr (assoc :output ret))))
+          (if (eq result-type 'output)
+              output
+            (ob-ipython--create-stdout-buffer output)
+            (cond ((and file (string= (f-ext file) "png"))
+                   (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
                 ((and file (string= (f-ext file) "svg"))
                  (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
-                (file (error "%s is currently an unsupported file extension." (f-ext file)))
-                (t (->> result (assoc 'text/plain) cdr))))))))
+                  (file (error "%s is currently an unsupported file extension." (f-ext file)))
+                  (t (->> result (assoc 'text/plain) cdr))))))
+      )))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
@@ -354,6 +396,144 @@ Make sure your src block has a :session param.")
     (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
                                       (cdr (assoc :kernel params)))
     (ob-ipython--create-repl (ob-ipython--normalize-session session))))
+
+
+;; Additional function for async
+
+(defun ob-ipython-async--execute-request (code name tempfile)
+  (let ((url-request-data code)
+        (url-request-method "POST")
+        (json-array-type 'list)
+        )
+
+    (with-temp-buffer tempfile
+                      (url-retrieve
+                       (format "http://%s:%d/execute/%s"
+                               ob-ipython-driver-hostname
+                               ob-ipython-driver-port
+                               name)
+                       (lambda (outp tfile)
+                         (if (>= (url-http-parse-response) 400)
+                             (progn
+                               (clear-async-list-on-error tfile)
+                               (ob-ipython--dump-error outp))
+                           (goto-char url-http-end-of-headers)
+                           (flush-lines "^\s*$" nil nil t)
+                           (kill-region (point) (point-min))
+                           (write-region (buffer-string) nil tfile)
+                           (ipython--async-sentinel tfile)
+                           )
+                         )
+                       (cons tempfile ())
+                       )
+                      ))
+  )
+
+(defun ipython--async-sentinel (tempfile)
+  ;; Make sentinel for post url-retrive
+
+  (let* ((current-file (buffer-file-name))
+         (jr (load_json_from_file tempfile))
+         (ret (ob-ipython--eval-async jr tempfile))
+         (result (cdr (assoc :result ret)))
+         (output (cdr (assoc :output ret)))
+         (fi (-elem-index tempfile async-list))
+         (tmp (-split-at fi async-list))
+         (ltail (car (cdr tmp)))
+         (org-filename (nth 1 ltail))
+         (result-type (nth 2 ltail))
+         (file (nth 3 ltail))
+         )
+
+    (save-window-excursion
+      (save-excursion
+        (save-restriction
+          (with-current-buffer (find-file-noselect org-filename)
+            (goto-char (point-min))
+            (re-search-forward tempfile)
+            (beginning-of-line)
+            (kill-line)            
+            (if (> (length file) 0)
+                (insert (concat "[[file:" file "]]"))
+              (insert ": ")
+              )
+             (if (eq result-type 'output)
+                 output
+               (ob-ipython--create-stdout-buffer output)               
+               (cond ((and file (string= (f-ext file) "png"))
+                      (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
+                      (org-redisplay-inline-images)
+                      )
+                     ((and file (string= (f-ext file) "svg"))
+                      (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file))
+                      (org-redisplay-inline-images)
+                      )
+                     (file (error "%s is currently an unsupported file extension." (f-ext file)))
+                     (t (insert (->> result (assoc 'text/plain) cdr)))
+                     )
+               )
+            ))))
+    ;; Clear variable and delete temp file
+    ;; (setq async-list (cons (car tmp) (-drop 4 ltail)))
+    (setq async-list (-remove-at-indices (-map (lambda (n) (+ fi n)) '(0 1 2 3)) async-list))
+    (delete-file tempfile)
+    )
+  )
+
+(defun clear-async-list-on-error(tempfile)
+  (let* ((fi (-elem-index tempfile async-list))
+         (tmp (-split-at fi async-list))
+         (ltail (car (cdr tmp)))
+         (org-filename (nth 1 ltail)))
+
+    ;; (setq async-list (cons (car tmp) (-drop 4 ltail)))
+    (setq async-list (-remove-at-indices (-map (lambda (n) (+ fi n)) '(0 1 2 3)) async-list))
+    (delete-file tempfile)
+
+    (save-window-excursion
+      (save-excursion
+        (save-restriction
+          (with-current-buffer (find-file-noselect org-filename)
+            (goto-char (point-min))
+            (re-search-forward tempfile)
+            (beginning-of-line)
+            (kill-line)            
+            (insert ": Error !!")
+            ))))
+    )
+  )
+
+(defun clear-async-last()
+  (let* ((tempfile (car async-list))
+         (fi (-elem-index tempfile async-list))
+         (tmp (-split-at fi async-list))
+         (ltail (car (cdr tmp))))
+
+    (setq async-list (cons (car tmp) (-drop 4 ltail)))
+
+    (delete-file tempfile)
+    )
+  )
+
+(defun load_json_from_file(file)
+  (with-temp-buffer
+    (insert-file-contents file)
+    (let ((json-array-type 'list))
+      (json-read))
+    )
+  )
+
+(defun clear-async-all()
+  (let* ((tempfile (car async-list))
+         (fi (-elem-index tempfile async-list))
+         (tmp (-split-at fi async-list))
+         (ltail (car (cdr tmp))))
+
+    (setq async-list (cons (car tmp) (-drop 4 ltail)))
+    (setq async-list (-remove-at-indices (-map (lambda (n) (+ fi n)) '(0 1 2 3)) async-list))
+    (delete-file tempfile)
+    )
+)
 
 (provide 'ob-ipython)
 
