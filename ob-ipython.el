@@ -337,8 +337,7 @@ This function is called by `org-babel-execute-src-block'."
 (defun ob-ipython--table-or-string (results)
   "Extract an Org table from RESULTS if it looks like it might be
 a table."
-  (if (null results)
-      results
+  (when results
     (org-babel-python-table-or-string results)))
 
 (defun org-babel-prep-session:ipython (session params)
