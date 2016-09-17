@@ -63,7 +63,7 @@
   :group 'ob-ipython)
 
 (defcustom ob-ipython-command
-  "ipython"
+  "jupyter"
   "Command to launch ipython. Usually ipython or jupyter."
   :group 'ob-ipython)
 
