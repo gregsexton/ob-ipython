@@ -58,36 +58,18 @@
 
 *** First, you need IPython
 
-    In version 4.0, [[http://ipython.org/][IPython]] transitioned from a monolithic
-    architecture to being just one of the kernels supported by the
-    more generic [[https://jupyter.org/][Jupyter]] application framework. Beginning with version
-    4.0 of the IPython kernel, the Jupyter console application is
-    actually responsible for the REPL interface. Therefore, depending
-    on the selected or available software, the appropriate branch of
-    this repository should be selected.
-
-    If unsure, use master and an IPython install of 4.0 or greater.
-
-**** ~master~ branch for Jupyter with IPython kernel >= 4.0
-
-     Before installing, you'll need Jupyter (>= 1.0) and the IPython
-     kernel (>= 4.0) installed and working. You will also need [[http://www.tornadoweb.org/en/stable/][Tornado]]
-     and the [[http://jupyter.readthedocs.org/en/latest/install.html][Jupyter]] console and client (~jupyter_console~,
-     ~jupyter_client~) libraries.
-
-**** ~ipython3~ branch for IPython >=3.0 && < 4.0
-
-     If you're on IPython 3, you can use the ~ipython3~ branch of this
-     repository. You will also need the [[http://www.tornadoweb.org/en/stable/][Tornado]] and [[https://zeromq.github.io/pyzmq/][PyZMQ]] libraries.
-     These libraries are usually installed as dependencies of the
-     ipython notebook.
+    Before installing, you'll need Jupyter (>= 1.0) and the IPython
+    kernel (>= 5.0) installed and working. You will also need [[http://www.tornadoweb.org/en/stable/][Tornado]]
+    and the [[http://jupyter.readthedocs.org/en/latest/install.html][Jupyter]] console and client (~jupyter_console~,
+    ~jupyter_client~) libraries. All of this should be trivially
+    installable using pip.
 
 *** Install the Emacs plugin
 
-    This package is now in MELPA. I recommend installing from there.
+    This package is in MELPA. I recommend installing from there.
 
-    For manual installation, you'll need the following elisp
-    dependencies first:
+    Otherwise, for manual installation, you'll need the following
+    elisp dependencies first:
 
     * https://github.com/magnars/dash.el
         * Including dash-functional
@@ -95,7 +77,9 @@
     * https://github.com/rejeep/f.el
 
     Then just drop this somewhere in your load path and ~(require
-    'ob-ipython)~. Lastly, activate ~ipython~ in Org-Babel:
+    'ob-ipython)~.
+
+    Lastly, activate ~ipython~ in Org-Babel:
 
     #+BEGIN_SRC emacs-lisp
       (org-babel-do-load-languages
