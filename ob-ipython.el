@@ -177,8 +177,13 @@
   (get-process "client-driver"))
 
 (defun ob-ipython--create-repl (name)
-  (run-python (s-join " " (ob-ipython--kernel-repl-cmd name)) nil nil)
-  (format "*%s*" python-shell-buffer-name))
+  ;; TODO: hack while we wait on
+  ;; https://github.com/jupyter/jupyter_console/issues/93
+  (let ((prev (getenv "JUPYTER_CONSOLE_TEST")))
+    (setenv "JUPYTER_CONSOLE_TEST" "1")
+    (run-python (s-join " " (ob-ipython--kernel-repl-cmd name)) nil nil)
+    (setenv "JUPYTER_CONSOLE_TEST" prev)
+    (format "*%s*" python-shell-buffer-name)))
 
 ;;; kernel management
 
