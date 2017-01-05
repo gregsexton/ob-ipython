@@ -228,6 +228,14 @@
 
    * Open a REPL using =C-c C-v C-z= so that you get completion in Python buffers.
 
+   * Export with the =LaTeX= backend using the =minted= package for source block highlighting fails for =ipython= blocks by default with the error
+     : Error: no lexer for alias 'ipython' found
+
+     To use the =python= lexer for =ipython= blocks, add this setting:
+     #+BEGIN_SRC emacs-lisp
+       (add-to-list 'org-latex-minted-langs '(ipython "python"))
+     #+END_SRC
+
 ** Help, it doesn't work
 
    First thing to do is check that you have all of the required
