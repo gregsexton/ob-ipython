@@ -214,7 +214,7 @@ a new kernel will be started."
 ;;; evaluation
 
 (defun ob-ipython--execute-request (code name)
-  (let ((url-request-data code)
+  (let ((url-request-data (encode-coding-string code 'utf-8))
         (url-request-method "POST"))
     (with-current-buffer (url-retrieve-synchronously
                           (format "http://%s:%d/execute/%s"
