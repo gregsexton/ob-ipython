@@ -133,8 +133,14 @@
 
 ;;; process management
 
+(defun ob-ipython--kernel-file (session-name)
+  (if (s-ends-with-p ".json" name)
+      name
+    (format "emacs-%s.json" name)))
+
 (defun ob-ipython--kernel-repl-cmd (name)
-  (list ob-ipython-command "console" "--existing" (format "emacs-%s.json" name)))
+  (list ob-ipython-command "console" "--existing"
+        (ob-ipython--kernel-file name)))
 
 (defun ob-ipython--create-process (name cmd)
   (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
@@ -143,7 +149,7 @@
   (when (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
     (apply 'ob-ipython--launch-driver
            (append (list (format "kernel-%s" name))
-                   (list "--conn-file" (format "emacs-%s.json" name))
+                   (list "--conn-file" (ob-ipython--kernel-file name))
                    (if kernel (list "--kernel" kernel) '())
                    ;;should be last in the list of args
                    (if ob-ipython-kernel-extra-args
@@ -366,8 +372,9 @@ VARS contains resolved variable references"
       (error "ob-ipython currently only supports evaluation using a session.
 Make sure your src block has a :session param.")
     (ob-ipython--create-client-driver)
-    (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
-                                      (cdr (assoc :kernel params)))
+    (when (not (s-ends-with-p ".json" session))
+      (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
+                                        (cdr (assoc :kernel params))))
     (ob-ipython--create-repl (ob-ipython--normalize-session session))))
 
 (provide 'ob-ipython)

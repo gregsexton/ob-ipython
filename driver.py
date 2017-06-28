@@ -53,7 +53,11 @@ def msg_router(name, ch):
 clients = {}
 
 def create_client(name):
-    cf = find_connection_file('emacs-' + name)
+    if name.endswith('.json'):
+        # Received an existing kernel we should connect to.
+        cf = find_connection_file(name)
+    else:
+        cf = find_connection_file('emacs-' + name)
     c = client.BlockingKernelClient(connection_file=cf)
     c.load_connection_file()
     c.start_channels()
@@ -117,10 +121,10 @@ class DebugHandler(tornado.web.RequestHandler):
 
 def make_app():
     return tornado.web.Application([
-        tornado.web.url(r"/execute/(\w+)", ExecuteHandler),
-        tornado.web.url(r"/inspect/(\w+)", InspectHandler),
+        tornado.web.url(r"/execute/([\w\-\.]+)", ExecuteHandler),
+        tornado.web.url(r"/inspect/([\w\-\.]+)", InspectHandler),
         tornado.web.url(r"/debug", DebugHandler),
-        ])
+    ])
 
 def main(args):
     parser = argparse.ArgumentParser()
