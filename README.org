@@ -173,6 +173,16 @@
      : (2, [['a', 1, 2], ['b', 2, 3], ['c', 3, 4]])
    #+END_SRC
 
+   Asynchronous execution is supported. Use the ~:async t~ option.
+
+   #+BEGIN_SRC org
+     ,#+BEGIN_SRC ipython :session :file /tmp/image.png :exports both :async t
+       import time
+       time.sleep(3)
+       plt.hist(np.random.randn(20000), bins=200)
+     ,#+END_SRC
+   #+END_SRC
+
 ** What features are there outside of Org SRC block evaluation?
 
    * You can ask the running IPython kernel for documentation. Open a
