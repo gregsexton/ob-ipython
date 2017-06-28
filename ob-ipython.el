@@ -144,7 +144,11 @@
     (apply 'ob-ipython--launch-driver
            (append (list (format "kernel-%s" name))
                    (list "--conn-file" (format "emacs-%s.json" name))
-                   (if kernel (list "--kernel" kernel) '())))))
+                   (if kernel (list "--kernel" kernel) '())
+                   ;;should be last in the list of args
+                   (if ob-ipython-kernel-extra-args
+                       (list "--") '())
+                   ob-ipython-kernel-extra-args))))
 
 (defun ob-ipython--get-kernel-processes ()
   (let ((procs (-filter (lambda (p)
