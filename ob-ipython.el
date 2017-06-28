@@ -42,7 +42,7 @@
 (require 'json)
 (require 'python)
 
-;;; variables
+;; variables
 
 (defcustom ob-ipython-kernel-extra-args '()
   "List of extra args to pass when creating a kernel."
@@ -67,7 +67,7 @@
   "Command to launch ipython. Usually ipython or jupyter."
   :group 'ob-ipython)
 
-;;; utils
+;; utils
 
 (defun ob-ipython--write-string-to-file (file string)
   (if string
@@ -131,7 +131,7 @@
       (goto-char (point-min))))
   (error "There was a fatal error trying to process the request. See *ob-ipython-debug*"))
 
-;;; process management
+;; process management
 
 (defun ob-ipython--kernel-file (session-name)
   (if (s-ends-with-p ".json" name)
@@ -195,7 +195,7 @@
     (setenv "JUPYTER_CONSOLE_TEST" prev)
     (format "*%s*" python-shell-buffer-name)))
 
-;;; kernel management
+;; kernel management
 
 (defun ob-ipython--choose-kernel ()
   (let ((procs (ob-ipython--get-kernel-processes)))
@@ -221,7 +221,7 @@ a new kernel will be started."
     (-when-let (p (ob-ipython--get-driver-process)) (delete-process p))
     (message (format "Killed %s" (process-name proc)))))
 
-;;; evaluation
+;; evaluation
 
 (defun ob-ipython--execute-request (code name)
   (let ((url-request-data code)
@@ -236,6 +236,27 @@ a new kernel will be started."
         (goto-char url-http-end-of-headers)
         (let ((json-array-type 'list))
           (json-read))))))
+
+(defun ob-ipython--execute-request-async (code name callback args)
+  (let ((url-request-data code)
+        (url-request-method "POST")
+        (json-array-type 'list))
+    (with-temp-buffer
+      (url-retrieve
+       (format "http://%s:%d/execute/%s"
+               ob-ipython-driver-hostname
+               ob-ipython-driver-port
+               name)
+       (lambda (status callback args)
+         (if (>= (url-http-parse-response) 400)
+             (progn
+               (ob-ipython--dump-error status))
+           (goto-char url-http-end-of-headers)
+           (let ((json-array-type 'list))
+             (apply callback (-> (json-read)
+                                 ob-ipython--eval
+                                 (cons args))))))
+       (list callback args)))))
 
 (defun ob-ipython--extract-output (msgs)
   (->> msgs
@@ -280,7 +301,7 @@ a new kernel will be started."
           ((string= "abort" status) (error "Kernel execution aborted."))
           ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
 
-;;; inspection
+;; inspection
 
 (defun ob-ipython--inspect-request (code &optional pos detail)
   (let ((url-request-data (json-encode `((code . ,code)
@@ -314,7 +335,7 @@ a new kernel will be started."
       (ob-ipython--create-inspect-buffer result)
     (message "No documentation was found.")))
 
-;;; babel framework
+;; babel framework
 
 (add-to-list 'org-src-lang-modes '("ipython" . python))
 
@@ -328,6 +349,30 @@ a new kernel will be started."
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
+  (if (cdr (assoc :async params))
+      (ob-ipython--execute-async body params)
+    (ob-ipython--execute-sync body params)))
+
+;;; TODO: refactor these two functions in to one generic
+(defun ob-ipython--execute-async (body params)
+  (let* ((file (cdr (assoc :file params)))
+         (session (cdr (assoc :session params)))
+         (result-type (cdr (assoc :result-type params)))
+         (sentinel (ipython--async-gen-sentinel)))
+    (org-babel-ipython-initiate-session session)
+    (ob-ipython--execute-request-async
+     (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
+                                    params (org-babel-variable-assignments:python params))
+     (ob-ipython--normalize-session session)
+     (lambda (ret sentinel buffer file result-type)
+       (let ((replacement (ob-ipython--process-response ret file result-type)))
+         (when (null file)
+           (ipython--async-replace-sentinel sentinel buffer
+                                            replacement))))
+     (list sentinel (current-buffer) file result-type))
+    (or file sentinel)))
+
+(defun ob-ipython--execute-sync (body params)
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params)))
          (result-type (cdr (assoc :result-type params))))
@@ -337,17 +382,20 @@ This function is called by `org-babel-execute-src-block'."
                       (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                                      params (org-babel-variable-assignments:python params))
                       (ob-ipython--normalize-session session))))
-      (let ((result (cdr (assoc :result ret)))
-            (output (cdr (assoc :output ret))))
-        (if (eq result-type 'output)
-            output
-          (ob-ipython--create-stdout-buffer output)
-          (cond ((and file (string= (f-ext file) "png"))
-                 (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
-                ((and file (string= (f-ext file) "svg"))
-                 (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
-                (file (error "%s is currently an unsupported file extension." (f-ext file)))
-                (t (->> result reverse (assoc 'text/plain) cdr ob-ipython--table-or-string))))))))
+      (ob-ipython--process-response ret file result-type))))
+
+(defun ob-ipython--process-response (ret file result-type)
+  (let ((result (cdr (assoc :result ret)))
+        (output (cdr (assoc :output ret))))
+    (if (eq result-type 'output)
+        output
+      (ob-ipython--create-stdout-buffer output)
+      (cond ((and file (string= (f-ext file) "png"))
+             (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+            ((and file (string= (f-ext file) "svg"))
+             (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
+            (file (error "%s is currently an unsupported file extension." (f-ext file)))
+            (t (->> result reverse (assoc 'text/plain) cdr ob-ipython--table-or-string))))))
 
 (defun ob-ipython--table-or-string (results)
   "Extract an Org table from RESULTS if it looks like it might be
@@ -376,6 +424,46 @@ Make sure your src block has a :session param.")
       (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
                                         (cdr (assoc :kernel params))))
     (ob-ipython--create-repl (ob-ipython--normalize-session session))))
+
+;; async
+
+(defun ipython--async-gen-sentinel ()
+  ;; lifted directly from org-id. thanks.
+  (let ((rnd (md5 (format "%s%s%s%s%s%s%s"
+                          (random)
+                          (current-time)
+                          (user-uid)
+                          (emacs-pid)
+                          (user-full-name)
+                          user-mail-address
+                          (recent-keys)))))
+    (format "%s-%s-4%s-%s%s-%s"
+            (substring rnd 0 8)
+            (substring rnd 8 12)
+            (substring rnd 13 16)
+            (format "%x"
+                    (logior
+                     #b10000000
+                     (logand
+                      #b10111111
+                      (string-to-number
+                       (substring rnd 16 18) 16))))
+            (substring rnd 18 20)
+            (substring rnd 20 32))))
+
+(defun ipython--async-replace-sentinel (sentinel buffer replacement)
+  ;; Make sentinel for post url-retrive
+  (save-window-excursion
+    (save-excursion
+      (save-restriction
+        (with-current-buffer buffer
+          (goto-char (point-min))
+          (re-search-forward sentinel)
+          (org-babel-previous-src-block)
+          (org-babel-remove-result)
+          (org-babel-insert-result replacement))))))
+
+;; lib
 
 (provide 'ob-ipython)
 
