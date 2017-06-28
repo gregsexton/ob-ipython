@@ -238,6 +238,8 @@
        (add-to-list 'org-latex-minted-langs '(ipython "python"))
      #+END_SRC
 
+   * Use [[https://pypi.python.org/pypi/tabulate][tabulate]] to output data frames for org mode.
+
 ** Help, it doesn't work
 
    First thing to do is check that you have all of the required
