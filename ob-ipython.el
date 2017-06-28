@@ -42,7 +42,7 @@
 (require 'json)
 (require 'python)
 
-;;; variables
+;; variables
 
 (defcustom ob-ipython-kernel-extra-args '()
   "List of extra args to pass when creating a kernel."
@@ -67,7 +67,7 @@
   "Command to launch ipython. Usually ipython or jupyter."
   :group 'ob-ipython)
 
-;;; utils
+;; utils
 
 (defun ob-ipython--write-string-to-file (file string)
   (if string
@@ -131,7 +131,7 @@
       (goto-char (point-min))))
   (error "There was a fatal error trying to process the request. See *ob-ipython-debug*"))
 
-;;; process management
+;; process management
 
 (defun ob-ipython--kernel-file (session-name)
   (if (s-ends-with-p ".json" name)
@@ -195,7 +195,7 @@
     (setenv "JUPYTER_CONSOLE_TEST" prev)
     (format "*%s*" python-shell-buffer-name)))
 
-;;; kernel management
+;; kernel management
 
 (defun ob-ipython--choose-kernel ()
   (let ((procs (ob-ipython--get-kernel-processes)))
@@ -221,7 +221,7 @@ a new kernel will be started."
     (-when-let (p (ob-ipython--get-driver-process)) (delete-process p))
     (message (format "Killed %s" (process-name proc)))))
 
-;;; evaluation
+;; evaluation
 
 (defun ob-ipython--execute-request (code name)
   (let ((url-request-data code)
@@ -236,6 +236,27 @@ a new kernel will be started."
         (goto-char url-http-end-of-headers)
         (let ((json-array-type 'list))
           (json-read))))))
+
+(defun ob-ipython--execute-request-async (code name callback args)
+  (let ((url-request-data code)
+        (url-request-method "POST")
+        (json-array-type 'list))
+    (with-temp-buffer
+      (url-retrieve
+       (format "http://%s:%d/execute/%s"
+               ob-ipython-driver-hostname
+               ob-ipython-driver-port
+               name)
+       (lambda (status callback args)
+         (if (>= (url-http-parse-response) 400)
+             (progn
+               (ob-ipython--dump-error status))
+           (goto-char url-http-end-of-headers)
+           (let ((json-array-type 'list))
+             (apply callback (-> (json-read)
+                                 ob-ipython--eval
+                                 (cons args))))))
+       (list callback args)))))
 
 (defun ob-ipython--extract-output (msgs)
   (->> msgs
@@ -280,24 +301,7 @@ a new kernel will be started."
           ((string= "abort" status) (error "Kernel execution aborted."))
           ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
 
-
-(defun ob-ipython--eval-async (service-response tfile)
-  (let ((status (ob-ipython--extract-status service-response)))
-    (cond ((string= "ok" status) `((:result . ,(ob-ipython--extract-result service-response))
-                                   (:output . ,(ob-ipython--extract-output service-response))))
-          ((string= "abort" status) (progn
-                                      ;; (clear-async-last)
-                                      (clear-async-list-on-error tfile)
-                                      (error "Kernel execution aborted.")
-                                      ))
-          ((string= "error" status) (progn
-                                      ;; (clear-async-last)
-                                      (clear-async-list-on-error tfile)
-                                      (error (ob-ipython--extract-error service-response))
-                                      )))))
-
-
-;;; inspection
+;; inspection
 
 (defun ob-ipython--inspect-request (code &optional pos detail)
   (let ((url-request-data (json-encode `((code . ,code)
@@ -331,7 +335,7 @@ a new kernel will be started."
       (ob-ipython--create-inspect-buffer result)
     (message "No documentation was found.")))
 
-;;; babel framework
+;; babel framework
 
 (add-to-list 'org-src-lang-modes '("ipython" . python))
 
@@ -342,52 +346,56 @@ a new kernel will be started."
       (error "default is reserved for when no name is provided. Please use a different session name.")
     (or session "default")))
 
-
-;; Code for both sync and async
-(setq async-list ())
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
-
   (if (cdr (assoc :async params))
-      (let* ((current-file (buffer-file-name))
-             (code (org-element-property :value (org-element-context)))
-             (temporary-file-directory ".")
-             (tempfile (make-temp-file "py-"))
-             (file (cdr (assoc :async-file params))) ;; use async-file instead of file
-             (session (cdr (assoc :session params)))
-             (result-type (cdr (assoc :result-type params)))
-             )
-        (org-babel-remove-result)
-        (setq async-list (cons tempfile (cons (buffer-file-name) (cons result-type (cons file async-list)))))
-        ;; (org-babel-ipython-initiate-session session)
-        (ob-ipython-async--execute-request
-         (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
-                                        params (org-babel-variable-assignments:python params))
-         (ob-ipython--normalize-session session)
-         tempfile
-         )
-        tempfile)
-    (let* ((file (cdr (assoc :file params)))
-           (session (cdr (assoc :session params)))
-           (result-type (cdr (assoc :result-type params))))
-      (org-babel-ipython-initiate-session session params)
-      (-when-let (ret (ob-ipython--eval
-                       (ob-ipython--execute-request
-                        (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
-                                                       params (org-babel-variable-assignments:python params))
-                        (ob-ipython--normalize-session session))))
-        (let ((result (cdr (assoc :result ret)))
-              (output (cdr (assoc :output ret))))
-          (if (eq result-type 'output)
-              output
-            (ob-ipython--create-stdout-buffer output)
-            (cond ((and file (string= (f-ext file) "png"))
-                   (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
-                ((and file (string= (f-ext file) "svg"))
-                 (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
-                (file (error "%s is currently an unsupported file extension." (f-ext file)))
-                (t (->> result reverse (assoc 'text/plain) cdr ob-ipython--table-or-string))))))))
+      (ob-ipython--execute-async body params)
+    (ob-ipython--execute-sync body params)))
+
+;;; TODO: refactor these two functions in to one generic
+(defun ob-ipython--execute-async (body params)
+  (let* ((file (cdr (assoc :file params)))
+         (session (cdr (assoc :session params)))
+         (result-type (cdr (assoc :result-type params)))
+         (sentinel (ipython--async-gen-sentinel)))
+    (org-babel-ipython-initiate-session session)
+    (ob-ipython--execute-request-async
+     (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
+                                    params (org-babel-variable-assignments:python params))
+     (ob-ipython--normalize-session session)
+     (lambda (ret sentinel buffer file result-type)
+       (let ((replacement (ob-ipython--process-response ret file result-type)))
+         (when (null file)
+           (ipython--async-replace-sentinel sentinel buffer
+                                            replacement))))
+     (list sentinel (current-buffer) file result-type))
+    (or file sentinel)))
+
+(defun ob-ipython--execute-sync (body params)
+  (let* ((file (cdr (assoc :file params)))
+         (session (cdr (assoc :session params)))
+         (result-type (cdr (assoc :result-type params))))
+    (org-babel-ipython-initiate-session session params)
+    (-when-let (ret (ob-ipython--eval
+                     (ob-ipython--execute-request
+                      (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
+                                                     params (org-babel-variable-assignments:python params))
+                      (ob-ipython--normalize-session session))))
+      (ob-ipython--process-response ret file result-type))))
+
+(defun ob-ipython--process-response (ret file result-type)
+  (let ((result (cdr (assoc :result ret)))
+        (output (cdr (assoc :output ret))))
+    (if (eq result-type 'output)
+        output
+      (ob-ipython--create-stdout-buffer output)
+      (cond ((and file (string= (f-ext file) "png"))
+             (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
+            ((and file (string= (f-ext file) "svg"))
+             (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
+            (file (error "%s is currently an unsupported file extension." (f-ext file)))
+            (t (->> result reverse (assoc 'text/plain) cdr ob-ipython--table-or-string))))))
 
 (defun ob-ipython--table-or-string (results)
   "Extract an Org table from RESULTS if it looks like it might be
@@ -417,143 +425,45 @@ Make sure your src block has a :session param.")
                                         (cdr (assoc :kernel params))))
     (ob-ipython--create-repl (ob-ipython--normalize-session session))))
 
+;; async
 
-;; Additional function for async
+(defun ipython--async-gen-sentinel ()
+  ;; lifted directly from org-id. thanks.
+  (let ((rnd (md5 (format "%s%s%s%s%s%s%s"
+                          (random)
+                          (current-time)
+                          (user-uid)
+                          (emacs-pid)
+                          (user-full-name)
+                          user-mail-address
+                          (recent-keys)))))
+    (format "%s-%s-4%s-%s%s-%s"
+            (substring rnd 0 8)
+            (substring rnd 8 12)
+            (substring rnd 13 16)
+            (format "%x"
+                    (logior
+                     #b10000000
+                     (logand
+                      #b10111111
+                      (string-to-number
+                       (substring rnd 16 18) 16))))
+            (substring rnd 18 20)
+            (substring rnd 20 32))))
 
-(defun ob-ipython-async--execute-request (code name tempfile)
-  (let ((url-request-data code)
-        (url-request-method "POST")
-        (json-array-type 'list)
-        )
-
-    (with-temp-buffer tempfile
-                      (url-retrieve
-                       (format "http://%s:%d/execute/%s"
-                               ob-ipython-driver-hostname
-                               ob-ipython-driver-port
-                               name)
-                       (lambda (outp tfile)
-                         (if (>= (url-http-parse-response) 400)
-                             (progn
-                               (clear-async-list-on-error tfile)
-                               (ob-ipython--dump-error outp))
-                           (goto-char url-http-end-of-headers)
-                           (flush-lines "^\s*$" nil nil t)
-                           (kill-region (point) (point-min))
-                           (write-region (buffer-string) nil tfile)
-                           (ipython--async-sentinel tfile)
-                           )
-                         )
-                       (cons tempfile ())
-                       )
-                      ))
-  )
-
-(defun ipython--async-sentinel (tempfile)
+(defun ipython--async-replace-sentinel (sentinel buffer replacement)
   ;; Make sentinel for post url-retrive
+  (save-window-excursion
+    (save-excursion
+      (save-restriction
+        (with-current-buffer buffer
+          (goto-char (point-min))
+          (re-search-forward sentinel)
+          (org-babel-previous-src-block)
+          (org-babel-remove-result)
+          (org-babel-insert-result replacement))))))
 
-  (let* ((current-file (buffer-file-name))
-         (jr (load_json_from_file tempfile))
-         (ret (ob-ipython--eval-async jr tempfile))
-         (result (cdr (assoc :result ret)))
-         (output (cdr (assoc :output ret)))
-         (fi (-elem-index tempfile async-list))
-         (tmp (-split-at fi async-list))
-         (ltail (car (cdr tmp)))
-         (org-filename (nth 1 ltail))
-         (result-type (nth 2 ltail))
-         (file (nth 3 ltail))
-         )
-
-    (save-window-excursion
-      (save-excursion
-        (save-restriction
-          (with-current-buffer (find-file-noselect org-filename)
-            (goto-char (point-min))
-            (re-search-forward tempfile)
-            (beginning-of-line)
-            (kill-line)
-            (if (> (length file) 0)
-                (insert (concat "[[file:" file "]]"))
-              (insert ": ")
-              )
-             (if (eq result-type 'output)
-                 output
-               (ob-ipython--create-stdout-buffer output)
-               (cond ((and file (string= (f-ext file) "png"))
-                      (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file))
-                      (org-redisplay-inline-images)
-                      )
-                     ((and file (string= (f-ext file) "svg"))
-                      (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file))
-                      (org-redisplay-inline-images)
-                      )
-                     (file (error "%s is currently an unsupported file extension." (f-ext file)))
-                     (t (insert (->> result (assoc 'text/plain) cdr)))
-                     )
-               )
-            ))))
-    ;; Clear variable and delete temp file
-    ;; (setq async-list (cons (car tmp) (-drop 4 ltail)))
-    (setq async-list (-remove-at-indices (-map (lambda (n) (+ fi n)) '(0 1 2 3)) async-list))
-    (delete-file tempfile)
-    )
-  )
-
-(defun clear-async-list-on-error(tempfile)
-  (let* ((fi (-elem-index tempfile async-list))
-         (tmp (-split-at fi async-list))
-         (ltail (car (cdr tmp)))
-         (org-filename (nth 1 ltail)))
-
-    ;; (setq async-list (cons (car tmp) (-drop 4 ltail)))
-    (setq async-list (-remove-at-indices (-map (lambda (n) (+ fi n)) '(0 1 2 3)) async-list))
-    (delete-file tempfile)
-
-    (save-window-excursion
-      (save-excursion
-        (save-restriction
-          (with-current-buffer (find-file-noselect org-filename)
-            (goto-char (point-min))
-            (re-search-forward tempfile)
-            (beginning-of-line)
-            (kill-line)
-            (insert ": Error !!")
-            ))))
-    )
-  )
-
-(defun clear-async-last()
-  (let* ((tempfile (car async-list))
-         (fi (-elem-index tempfile async-list))
-         (tmp (-split-at fi async-list))
-         (ltail (car (cdr tmp))))
-
-    (setq async-list (cons (car tmp) (-drop 4 ltail)))
-
-    (delete-file tempfile)
-    )
-  )
-
-(defun load_json_from_file(file)
-  (with-temp-buffer
-    (insert-file-contents file)
-    (let ((json-array-type 'list))
-      (json-read))
-    )
-  )
-
-(defun clear-async-all()
-  (let* ((tempfile (car async-list))
-         (fi (-elem-index tempfile async-list))
-         (tmp (-split-at fi async-list))
-         (ltail (car (cdr tmp))))
-
-    (setq async-list (cons (car tmp) (-drop 4 ltail)))
-    (setq async-list (-remove-at-indices (-map (lambda (n) (+ fi n)) '(0 1 2 3)) async-list))
-    (delete-file tempfile)
-    )
-)
+;; lib
 
 (provide 'ob-ipython)
 
