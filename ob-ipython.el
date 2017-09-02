@@ -385,7 +385,7 @@ This function is called by `org-babel-execute-src-block'."
                                     params (org-babel-variable-assignments:python params))
      (ob-ipython--normalize-session session)
      (lambda (ret sentinel buffer file result-type)
-  (let ((replacement (ob-ipython--process-response ret file result-type)))
+       (let ((replacement (ob-ipython--process-response ret file result-type)))
          (when (null file)
            (ipython--async-replace-sentinel sentinel buffer
                                             replacement))))
@@ -417,7 +417,6 @@ This function is called by `org-babel-execute-src-block'."
 
 ;;; TODO: we create a new image every time
 (defun ob-ipython--render (file-or-nil values)
-  (debug-msg values)
   (-some (lambda (value)
            (cond ((eq (car value) 'image/png)
                   (let ((file (or file-or-nil (ob-ipython--generate-file-name ".png"))))
