@@ -67,6 +67,10 @@
   "Command to launch ipython. Usually ipython or jupyter."
   :group 'ob-ipython)
 
+(defcustom ob-ipython-resources-dir "./obipy-resources/"
+  "Directory where resources (e.g images) are stored so that they
+can be displayed.")
+
 ;; utils
 
 (defun ob-ipython--write-string-to-file (file string)
@@ -130,6 +134,9 @@
       (insert err-msg)
       (goto-char (point-min))))
   (error "There was a fatal error trying to process the request. See *ob-ipython-debug*"))
+
+(defun ob-ipython--generate-file-name (suffix)
+  (s-concat (make-temp-name ob-ipython-resources-dir) suffix))
 
 ;; process management
 
@@ -266,21 +273,27 @@ a new kernel will be started."
        (-reduce 's-concat)))
 
 (defun ob-ipython--extract-result (msgs)
-  (->> msgs
-       (-filter (lambda (msg) (-contains? '("execute_result" "display_data" "inspect_reply")
+  `((:value . ,(->> msgs
+                    (-filter (lambda (msg)
+                               (s-equals? "execute_result"
                                           (cdr (assoc 'msg_type msg)))))
-       (-mapcat (lambda (msg) (->> msg
-                                   (assoc 'content)
-                                   (assoc 'data)
-                                   cdr)))))
+                    (-mapcat (lambda (msg)
+                               (->> msg (assoc 'content) (assoc 'data) cdr)))))
+    (:display . ,(->> msgs
+                      (-filter (lambda (msg)
+                                 (s-equals? "display_data"
+                                            (cdr (assoc 'msg_type msg)))))
+                      (-mapcat (lambda (msg)
+                                 (->> msg (assoc 'content) (assoc 'data) cdr)))))))
 
 (defun ob-ipython--extract-error (msgs)
-  (let ((error-content (->> msgs
-                            (-filter (lambda (msg) (-contains? '("execute_reply" "inspect_reply")
-                                                               (cdr (assoc 'msg_type msg)))))
-                            car
-                            (assoc 'content)
-                            cdr)))
+  (let ((error-content
+         (->> msgs
+              (-filter (lambda (msg) (-contains? '("execute_reply" "inspect_reply")
+                                                 (cdr (assoc 'msg_type msg)))))
+              car
+              (assoc 'content)
+              cdr)))
     ;; TODO: this doesn't belong in this abstraction
     (ob-ipython--create-traceback-buffer (cdr (assoc 'traceback error-content)))
     (format "%s: %s" (cdr (assoc 'ename error-content)) (cdr (assoc 'evalue error-content)))))
@@ -325,7 +338,15 @@ a new kernel will be started."
          (resp (ob-ipython--inspect-request code pos 0))
          (status (ob-ipython--extract-status resp)))
     (if (string= "ok" status)
-        (ob-ipython--extract-result resp)
+        (->> resp
+             (-filter (lambda (msg)
+                        (-contains? '("execute_result" "display_data" "inspect_reply")
+                                    (cdr (assoc 'msg_type msg)))))
+             (-mapcat (lambda (msg)
+                        (->> msg
+                             (assoc 'content)
+                             (assoc 'data)
+                             cdr))))
       (error (ob-ipython--extract-error resp)))))
 
 (defun ob-ipython-inspect (buffer pos)
@@ -353,7 +374,6 @@ This function is called by `org-babel-execute-src-block'."
       (ob-ipython--execute-async body params)
     (ob-ipython--execute-sync body params)))
 
-;;; TODO: refactor these two functions in to one generic
 (defun ob-ipython--execute-async (body params)
   (let* ((file (cdr (assoc :file params)))
          (session (cdr (assoc :session params)))
@@ -365,7 +385,7 @@ This function is called by `org-babel-execute-src-block'."
                                     params (org-babel-variable-assignments:python params))
      (ob-ipython--normalize-session session)
      (lambda (ret sentinel buffer file result-type)
-       (let ((replacement (ob-ipython--process-response ret file result-type)))
+  (let ((replacement (ob-ipython--process-response ret file result-type)))
          (when (null file)
            (ipython--async-replace-sentinel sentinel buffer
                                             replacement))))
@@ -390,18 +410,33 @@ This function is called by `org-babel-execute-src-block'."
     (if (eq result-type 'output)
         output
       (ob-ipython--create-stdout-buffer output)
-      (cond ((and file (string= (f-ext file) "png"))
-             (->> result (assoc 'image/png) cdr (ob-ipython--write-base64-string file)))
-            ((and file (string= (f-ext file) "svg"))
-             (->> result (assoc 'image/svg+xml) cdr (ob-ipython--write-string-to-file file)))
-            (file (error "%s is currently an unsupported file extension." (f-ext file)))
-            (t (->> result reverse (assoc 'text/plain) cdr ob-ipython--table-or-string))))))
+      (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
+                              (list (cdr (assoc :value result))
+                                    (cdr (assoc :display result))))
+                        (remove-if-not nil))))))
 
-(defun ob-ipython--table-or-string (results)
-  "Extract an Org table from RESULTS if it looks like it might be
-a table."
-  (when results
-    (org-babel-python-table-or-string results)))
+;;; TODO: we create a new image every time
+(defun ob-ipython--render (file-or-nil values)
+  (debug-msg values)
+  (-some (lambda (value)
+           (cond ((eq (car value) 'image/png)
+                  (let ((file (or file-or-nil (ob-ipython--generate-file-name ".png"))))
+                    (ob-ipython--write-base64-string file (cdr value))
+                    (format "[[%s]]" file)))
+                 ((eq (car value) 'image/svg+xml)
+                  (let ((file (or file-or-nil (ob-ipython--generate-file-name ".svg"))))
+                    (ob-ipython--write-base64-string file (cdr value))
+                    (format "[[%s]]" file)))
+                 ((eq (car value) 'text/html)
+                  (let ((pandoc (executable-find "pandoc")))
+                    (and pandoc (with-temp-buffer
+                                  (insert (cdr value))
+                                  (shell-command-on-region
+                                   (point-min) (point-max)
+                                   (format "%s -f html -t org" pandoc) t t)
+                                  (s-trim (buffer-string))))))
+                 ((eq (car value) 'text/plain) (cdr value))))
+         values))
 
 (defun org-babel-prep-session:ipython (session params)
   "Prepare SESSION according to the header arguments in PARAMS.
@@ -463,7 +498,8 @@ Make sure your src block has a :session param.")
           (org-babel-remove-result)
           (org-babel-insert-result
            replacement
-           (cdr (assoc :result-params (nth 2 (org-babel-get-src-block-info))))))))))
+           (cdr (assoc :result-params (nth 2 (org-babel-get-src-block-info)))))
+          (org-redisplay-inline-images))))))
 
 ;; lib
 
