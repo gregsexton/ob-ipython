@@ -461,7 +461,9 @@ Make sure your src block has a :session param.")
           (re-search-forward sentinel)
           (org-babel-previous-src-block)
           (org-babel-remove-result)
-          (org-babel-insert-result replacement))))))
+          (org-babel-insert-result
+           replacement
+           (cdr (assoc :result-params (nth 2 (org-babel-get-src-block-info))))))))))
 
 ;; lib
 
