@@ -583,7 +583,7 @@ Make sure your src block has a :session param.")
         (with-current-buffer buffer
           (goto-char (point-min))
           (re-search-forward sentinel)
-          (org-babel-previous-src-block)
+          (re-search-backward "\\(call\\|src\\)_\\|^[ \t]*#\\+\\(BEGIN_SRC\\|CALL:\\)")
           (org-babel-remove-result)
           (org-babel-insert-result
            replacement
