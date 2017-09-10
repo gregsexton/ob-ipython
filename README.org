@@ -88,18 +88,15 @@
 
    #+BEGIN_SRC org
      ,#+BEGIN_SRC ipython :session :exports both :results raw drawer
-       plt.hist(np.random.randn(20000), bins=200)
+       _ = plt.hist(np.random.randn(20000), bins=200)
      ,#+END_SRC
    #+END_SRC
 
-   If you provide a file argument, this will be used instead of
-   generating one.
 
-   #+BEGIN_SRC org
-     ,#+BEGIN_SRC ipython :session :file /tmp/image.png :exports both :results raw drawer
-       plt.hist(np.random.randn(20000), bins=200)
-     ,#+END_SRC
-   #+END_SRC
+   The evaluated result of the last expression is discarded here
+   (/_  =  plt.hist(...)/)
+   as it can get rather large depending on the  data.
+   If you want to see the results, remove the "/_ =/"
 
    In order to make a svg graphic rather than png, you may specify the
    output format globally to IPython.
