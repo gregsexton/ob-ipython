@@ -13,8 +13,8 @@
 
 *** First, you need IPython
 
-    Before installing, you'll need Jupyter (>= 1.0) and the IPython
-    kernel (>= 5.0) installed and working. You will also need [[http://www.tornadoweb.org/en/stable/][Tornado]]
+    Before installing, you'll need Jupyter (>= 1.0) and IPython
+    (>= 5.0) installed and working. You will also need [[http://www.tornadoweb.org/en/stable/][Tornado]]
     and the [[http://jupyter.readthedocs.org/en/latest/install.html][Jupyter]] console and client (~jupyter_console~,
     ~jupyter_client~) libraries. All of this should be trivially
     installable using pip.
