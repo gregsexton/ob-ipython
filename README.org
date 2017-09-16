@@ -96,7 +96,7 @@
    generating one.
 
    #+BEGIN_SRC org
-     ,#+BEGIN_SRC ipython :session :file /tmp/image.png :exports both :results raw drawer
+     ,#+BEGIN_SRC ipython :session :ipyfile /tmp/image.png :exports both :results raw drawer
        plt.hist(np.random.randn(20000), bins=200)
      ,#+END_SRC
    #+END_SRC
@@ -144,7 +144,7 @@
    Asynchronous execution is supported. Use the ~:async t~ option.
 
    #+BEGIN_SRC org
-     ,#+BEGIN_SRC ipython :session :file /tmp/image.png :exports both :async t :results raw drawer
+     ,#+BEGIN_SRC ipython :session :ipyfile /tmp/image.png :exports both :async t :results raw drawer
        import time
        time.sleep(3)
        plt.hist(np.random.randn(20000), bins=200)
@@ -192,7 +192,7 @@
        # name: ipython block
        # key: py
        # --
-       ,#+BEGIN_SRC ipython :session ${1::file ${2:$$(let ((temporary-file-directory "./")) (make-temp-file "py" nil ".png"))} }:exports ${3:both}
+       ,#+BEGIN_SRC ipython :session ${1::ipyfile ${2:$$(let ((temporary-file-directory "./")) (make-temp-file "py" nil ".png"))} }:exports ${3:both}
        $0
        ,#+END_SRC
      #+END_SRC

@@ -375,7 +375,7 @@ This function is called by `org-babel-execute-src-block'."
     (ob-ipython--execute-sync body params)))
 
 (defun ob-ipython--execute-async (body params)
-  (let* ((file (cdr (assoc :file params)))
+  (let* ((file (cdr (assoc :ipyfile params)))
          (session (cdr (assoc :session params)))
          (result-type (cdr (assoc :result-type params)))
          (sentinel (ipython--async-gen-sentinel)))
@@ -390,10 +390,10 @@ This function is called by `org-babel-execute-src-block'."
            (ipython--async-replace-sentinel sentinel buffer
                                             replacement))))
      (list sentinel (current-buffer) file result-type))
-    (or file sentinel)))
+    sentinel))
 
 (defun ob-ipython--execute-sync (body params)
-  (let* ((file (cdr (assoc :file params)))
+  (let* ((file (cdr (assoc :ipyfile params)))
          (session (cdr (assoc :session params)))
          (result-type (cdr (assoc :result-type params))))
     (org-babel-ipython-initiate-session session params)
