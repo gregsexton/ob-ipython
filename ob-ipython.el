@@ -426,14 +426,14 @@ This function is called by `org-babel-execute-src-block'."
                   (let ((file (or file-or-nil (ob-ipython--generate-file-name ".svg"))))
                     (ob-ipython--write-base64-string file (cdr value))
                     (format "[[%s]]" file)))
-                 ((eq (car value) 'text/html)
-                  (let ((pandoc (executable-find "pandoc")))
-                    (and pandoc (with-temp-buffer
-                                  (insert (cdr value))
-                                  (shell-command-on-region
-                                   (point-min) (point-max)
-                                   (format "%s -f html -t org" pandoc) t t)
-                                  (s-trim (buffer-string))))))
+                 ;; ((eq (car value) 'text/html)
+                 ;;  (let ((pandoc (executable-find "pandoc")))
+                 ;;    (and pandoc (with-temp-buffer
+                 ;;                  (insert (cdr value))
+                 ;;                  (shell-command-on-region
+                 ;;                   (point-min) (point-max)
+                 ;;                   (format "%s -f html -t org" pandoc) t t)
+                 ;;                  (s-trim (buffer-string))))))
                  ((eq (car value) 'text/plain)
                   (let ((lines (s-lines (cdr value))))
                     (if (cdr lines)

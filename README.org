@@ -216,9 +216,9 @@
        (add-to-list 'org-latex-minted-langs '(ipython "python"))
      #+END_SRC
 
-   * Install pandoc and anything ipython renders as html will be
-     converted to org. This is mostly useful for getting nice tables
-     automatically.
+   # * Install pandoc and anything ipython renders as html will be
+   #   converted to org. This is mostly useful for getting nice tables
+   #   automatically.
 
 ** Help, it doesn't work
 
