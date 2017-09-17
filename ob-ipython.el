@@ -418,7 +418,9 @@ This function is called by `org-babel-execute-src-block'."
 ;;; TODO: we create a new image every time
 (defun ob-ipython--render (file-or-nil values)
   (-some (lambda (value)
-           (cond ((eq (car value) 'image/png)
+           (cond ((eq (car value) 'text/org)
+                  (cdr value))
+                 ((eq (car value) 'image/png)
                   (let ((file (or file-or-nil (ob-ipython--generate-file-name ".png"))))
                     (ob-ipython--write-base64-string file (cdr value))
                     (format "[[%s]]" file)))
