@@ -434,7 +434,11 @@ This function is called by `org-babel-execute-src-block'."
                                    (point-min) (point-max)
                                    (format "%s -f html -t org" pandoc) t t)
                                   (s-trim (buffer-string))))))
-                 ((eq (car value) 'text/plain) (cdr value))))
+                 ((eq (car value) 'text/plain)
+                  (let ((lines (s-lines (cdr value))))
+                    (if (cdr lines)
+                        (format "#+BEGIN_EXAMPLE\n%s\n#+END_EXAMPLE" (s-join "\n  " lines))
+                      (s-concat ": " (car lines)))))))
          values))
 
 (defun org-babel-prep-session:ipython (session params)
