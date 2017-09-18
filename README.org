@@ -101,8 +101,8 @@
      ,#+END_SRC
    #+END_SRC
 
-   In order to make a svg graphic rather than png, you may specify the
-   output format globally to IPython.
+   In order to make an svg graphic rather than a png, you may specify
+   the output format globally to IPython.
 
    #+BEGIN_EXAMPLE
      %config InlineBackend.figure_format = 'svg'
@@ -197,6 +197,14 @@
        ,#+END_SRC
      #+END_SRC
 
+     These days I use this more often:
+
+     #+BEGIN_SRC snippet
+       ,#+BEGIN_SRC ipython :session :exports both :results raw drawer
+         $0
+       ,#+END_SRC
+     #+END_SRC
+
    * I use the following Org settings:
 
      #+BEGIN_SRC emacs-lisp
@@ -208,7 +216,9 @@
 
    * Open a REPL using =C-c C-v C-z= so that you get completion in Python buffers.
 
-   * Export with the =LaTeX= backend using the =minted= package for source block highlighting fails for =ipython= blocks by default with the error
+   * Export with the =LaTeX= backend using the =minted= package for
+     source block highlighting fails for =ipython= blocks by default
+     with the error
      : Error: no lexer for alias 'ipython' found
 
      To use the =python= lexer for =ipython= blocks, add this setting:
@@ -219,6 +229,28 @@
    # * Install pandoc and anything ipython renders as html will be
    #   converted to org. This is mostly useful for getting nice tables
    #   automatically.
+
+   * ob-ipython will display anything back from ipython with the mime
+     type 'text/org' verbatim. This allows you and others to create
+     [[https://www.safaribooksonline.com/blog/2014/02/11/altering-display-existing-classes-ipython/][formatters]] that output raw org. For example, drop this in your
+     ipython startup file to have arrays and dataframes rendered as
+     org tables:
+
+     #+BEGIN_SRC python
+       import IPython
+       from tabulate import tabulate
+
+       class OrgFormatter(IPython.core.formatters.BaseFormatter):
+           def __call__(self, obj):
+               try:
+                   return tabulate(obj, headers='keys',
+                                   tablefmt='orgtbl', showindex='always')
+               except:
+                   return None
+
+       ip = get_ipython()
+       ip.display_formatter.formatters['text/org'] = OrgFormatter()
+     #+END_SRC
 
 ** Help, it doesn't work
 
