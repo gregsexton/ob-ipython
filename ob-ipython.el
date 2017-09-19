@@ -140,7 +140,7 @@ can be displayed.")
 
 ;; process management
 
-(defun ob-ipython--kernel-file (session-name)
+(defun ob-ipython--kernel-file (name)
   (if (s-ends-with-p ".json" name)
       name
     (format "emacs-%s.json" name)))
