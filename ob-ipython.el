@@ -173,11 +173,15 @@ can be displayed.")
           procs)))
 
 (defun ob-ipython--launch-driver (name &rest args)
-  (let* ((python (locate-file (if (eq system-type 'windows-nt)
-                                  "python.exe"
-                                (or python-shell-interpreter "python"))
-                              exec-path))
-         (pargs (append (list python "--" ob-ipython-driver-path) args)))
+  (let* ((command (if (eq system-type 'windows-nt)
+		      "python.exe"
+		    (or python-shell-interpreter "python")))
+	 (exec-path (if (and command (file-name-directory command))
+			;; If the command has slashes, make sure we
+			;; first look relative to the current directory.
+			(cons default-directory exec-path) exec-path))
+	 (python (locate-file command exec-path))
+	 (pargs (append (list python "--" ob-ipython-driver-path) args)))
     (ob-ipython--create-process name pargs)
     ;; give kernel time to initialize and write connection file
     (sleep-for 1)))
