@@ -73,23 +73,23 @@ def get_client(name):
     return clients[name]
 
 def handler(webhandler, msgid):
-    msgs = []
     hasreply, hasidle = [False], [False] # hack to allow closing over these variables
+    # handler is called from multiple threads - we need to protect the webhandler
+    serialize = threading.Lock()
     def f(msg):
-        msgs.append(msg)
-        if msg.get('msg_type', '') in ['execute_reply', 'inspect_reply']:
-            hasreply[0] = True
-        elif (msg.get('msg_type', '') == 'status' and
-            msg['content']['execution_state'] == 'idle'):
-            hasidle[0] = True
-        if hasreply[0] and hasidle[0]:
-            remove_handler(msgid)
-            webhandler.set_header("Content-Type", "application/json")
-            def accept(msg):
-                return not msg['msg_type'] in ['status', 'execute_input']
-            webhandler.write(json.dumps([m for m in msgs if accept(m)],
-                                        default=str))
-            webhandler.finish()
+        with serialize:
+            if msg.get('msg_type', '') in ['execute_reply', 'inspect_reply']:
+                hasreply[0] = True
+            elif (msg.get('msg_type', '') == 'status' and
+                msg['content']['execution_state'] == 'idle'):
+                hasidle[0] = True
+            if not msg['msg_type'] in ['status', 'execute_input']:
+                webhandler.set_header("Content-Type", "application/json")
+                webhandler.write(json.dumps(msg, default=str))
+                webhandler.flush()
+            if hasreply[0] and hasidle[0]:
+                remove_handler(msgid)
+                webhandler.finish()
     return f
 
 class ExecuteHandler(tornado.web.RequestHandler):

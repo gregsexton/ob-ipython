@@ -230,6 +230,14 @@ a new kernel will be started."
 
 ;; evaluation
 
+(defun ob-ipython--collect-json ()
+  ;; this function assumes that we're in a buffer with the json lines
+  (let ((json-array-type 'list))
+    (let (acc)
+      (while (not (= (point) (point-max)))
+        (setq acc (cons (json-read) acc)))
+      (nreverse acc))))
+
 (defun ob-ipython--execute-request (code name)
   (let ((url-request-data code)
         (url-request-method "POST"))
@@ -241,13 +249,11 @@ a new kernel will be started."
       (if (>= (url-http-parse-response) 400)
           (ob-ipython--dump-error (buffer-string))
         (goto-char url-http-end-of-headers)
-        (let ((json-array-type 'list))
-          (json-read))))))
+        (ob-ipython--collect-json)))))
 
 (defun ob-ipython--execute-request-async (code name callback args)
   (let ((url-request-data code)
-        (url-request-method "POST")
-        (json-array-type 'list))
+        (url-request-method "POST"))
     (with-temp-buffer
       (url-retrieve
        (format "http://%s:%d/execute/%s"
@@ -260,7 +266,7 @@ a new kernel will be started."
                (ob-ipython--dump-error status))
            (goto-char url-http-end-of-headers)
            (let ((json-array-type 'list))
-             (apply callback (-> (json-read)
+             (apply callback (-> (ob-ipython--collect-json)
                                  ob-ipython--eval
                                  (cons args))))))
        (list callback args)))))
