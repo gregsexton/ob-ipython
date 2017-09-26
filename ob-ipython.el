@@ -386,9 +386,7 @@ This function is called by `org-babel-execute-src-block'."
      (ob-ipython--normalize-session session)
      (lambda (ret sentinel buffer file result-type)
        (let ((replacement (ob-ipython--process-response ret file result-type)))
-         (when (null file)
-           (ipython--async-replace-sentinel sentinel buffer
-                                            replacement))))
+         (ipython--async-replace-sentinel sentinel buffer replacement)))
      (list sentinel (current-buffer) file result-type))
     sentinel))
 
