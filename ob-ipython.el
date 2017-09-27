@@ -41,6 +41,7 @@
 (require 'f)
 (require 'json)
 (require 'python)
+(require 'cl)
 
 ;; variables
 
@@ -60,6 +61,12 @@
   (f-expand "./driver.py"
             (or (-when-let (f load-file-name) (f-dirname f)) default-directory))
   "Path to the driver script."
+  :group 'ob-ipython)
+
+(defcustom ob-ipython-client-path
+  (f-expand "./test.py"
+            (or (-when-let (f load-file-name) (f-dirname f)) default-directory))
+  "Path to the client script."
   :group 'ob-ipython)
 
 (defcustom ob-ipython-command
@@ -114,16 +121,28 @@ can be displayed.")
         (goto-char (point-min))))
     (pop-to-buffer buf)))
 
-(defun ob-ipython--create-stdout-buffer (stdout)
-  (when (not (s-blank? stdout))
+(defun ob-ipython--clear-output-buffer ()
+  (let ((buf (get-buffer-create "*ob-ipython-out*")))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)))))
+
+;;; TODO: need to rename and maybe have a separate one for stderr so
+;;; it can be coloured
+(defun ob-ipython--output (output append-p)
+  (when (not (s-blank? output))
     (save-excursion
-      (let ((buf (get-buffer-create "*ob-ipython-stdout*")))
+      (let ((buf (get-buffer-create "*ob-ipython-out*")))
         (with-current-buffer buf
           (special-mode)
           (let ((inhibit-read-only t))
-            (erase-buffer)
-            (insert stdout)
-            (goto-char (point-min))))
+            (unless append-p (erase-buffer))
+            (let ((p (point)))
+              (insert output)
+              (ansi-color-apply-on-region p (point-max))
+              ;; this adds some support for control chars
+              (comint-carriage-motion p (point-max)))
+            (unless append-p (goto-char (point-min)))))
         (pop-to-buffer buf)))))
 
 (defun ob-ipython--dump-error (err-msg)
@@ -150,7 +169,15 @@ can be displayed.")
         (ob-ipython--kernel-file name)))
 
 (defun ob-ipython--create-process (name cmd)
-  (apply 'start-process name (format "*ob-ipython-%s*" name) (car cmd) (cdr cmd)))
+  (let ((buf (get-buffer-create (format "*ob-ipython-%s*" name))))
+    (with-current-buffer buf (erase-buffer))
+    (apply 'start-process name buf (car cmd) (cdr cmd))))
+
+(defun ob-ipython--get-python ()
+  (locate-file (if (eq system-type 'windows-nt)
+    "python.exe"
+  (or python-shell-interpreter "python"))
+               exec-path))
 
 (defun ob-ipython--create-kernel-driver (name &optional kernel)
   (when (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
@@ -173,11 +200,7 @@ can be displayed.")
           procs)))
 
 (defun ob-ipython--launch-driver (name &rest args)
-  (let* ((python (locate-file (if (eq system-type 'windows-nt)
-                                  "python.exe"
-                                (or python-shell-interpreter "python"))
-                              exec-path))
-         (pargs (append (list python "--" ob-ipython-driver-path) args)))
+  (let ((pargs (append (list (ob-ipython--get-python) "--" ob-ipython-driver-path) args)))
     (ob-ipython--create-process name pargs)
     ;; give kernel time to initialize and write connection file
     (sleep-for 1)))
@@ -235,46 +258,68 @@ a new kernel will be started."
   (let ((json-array-type 'list))
     (let (acc)
       (while (not (= (point) (point-max)))
-        (setq acc (cons (json-read) acc)))
+        (setq acc (cons (json-read) acc))
+        (forward-line))
       (nreverse acc))))
 
 (defun ob-ipython--execute-request (code name)
-  (let ((url-request-data code)
-        (url-request-method "POST"))
-    (with-current-buffer (url-retrieve-synchronously
-                          (format "http://%s:%d/execute/%s"
-                                  ob-ipython-driver-hostname
-                                  ob-ipython-driver-port
-                                  name))
-      (if (>= (url-http-parse-response) 400)
+  (with-temp-buffer
+    (let ((ret (apply 'call-process-region code nil
+                      (ob-ipython--get-python) nil t nil
+                      (list "--" ob-ipython-client-path "--conn-file" name))))
+      (if (> ret 0)
           (ob-ipython--dump-error (buffer-string))
-        (goto-char url-http-end-of-headers)
+        (goto-char (point-min))
         (ob-ipython--collect-json)))))
 
 (defun ob-ipython--execute-request-async (code name callback args)
-  (let ((url-request-data code)
-        (url-request-method "POST"))
-    (with-temp-buffer
-      (url-retrieve
-       (format "http://%s:%d/execute/%s"
-               ob-ipython-driver-hostname
-               ob-ipython-driver-port
-               name)
-       (lambda (status callback args)
-         (if (>= (url-http-parse-response) 400)
-             (progn
-               (ob-ipython--dump-error status))
-           (goto-char url-http-end-of-headers)
+  (let ((proc (ob-ipython--create-process
+               "execute"
+               (list (ob-ipython--get-python)
+                     "--" ob-ipython-client-path "--conn-file" name))))
+    ;; TODO: maybe add a way of disabling streaming output?
+    ;; TODO: cleanup and break out - we parse twice, can we parse once?
+    (set-process-filter
+     proc
+     (lexical-let ((parse-pos 0))
+       (lambda (proc output)
+         ;; not guaranteed to be given lines - we need to handle buffering
+         (with-current-buffer (process-buffer proc)
+           (goto-char (point-max))
+           (insert output)
            (let ((json-array-type 'list))
+             (goto-char parse-pos)
+             (while (not (= (point) (point-max)))
+               (condition-case nil
+                   (progn (-> (json-read)
+                              list
+                              ob-ipython--extract-output
+                              (ob-ipython--output t))
+                          (forward-line)
+                          (setq parse-pos (point)))
+                 (error (goto-char (point-max))))))))))
+    (set-process-sentinel
+     proc
+     (lexical-let ((callback callback)
+                   (args args))
+       (lambda (proc state)
+         (when (not (process-live-p proc))
+           (with-current-buffer (process-buffer proc)
+             (goto-char (point-min))
              (apply callback (-> (ob-ipython--collect-json)
                                  ob-ipython--eval
-                                 (cons args))))))
-       (list callback args)))))
+                                 (cons args))))))))
+    (process-send-string proc code)
+    (process-send-string proc "\n")
+    (process-send-eof proc)))
 
 (defun ob-ipython--extract-output (msgs)
   (->> msgs
        (-filter (lambda (msg) (string= "stream" (cdr (assoc 'msg_type msg)))))
-       (-filter (lambda (msg) (string= "stdout" (->> msg (assoc 'content) (assoc 'name) cdr))))
+       (-filter (lambda (msg) (-contains? '("stdout" "stderr")
+                                          (->> msg (assoc 'content)
+                                               (assoc 'name)
+                                               cdr))))
        (-map (lambda (msg) (->> msg (assoc 'content) (assoc 'text) cdr)))
        (-reduce 's-concat)))
 
@@ -376,6 +421,7 @@ a new kernel will be started."
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
 This function is called by `org-babel-execute-src-block'."
+  (ob-ipython--clear-output-buffer)
   (if (cdr (assoc :async params))
       (ob-ipython--execute-async body params)
     (ob-ipython--execute-sync body params)))
@@ -413,13 +459,12 @@ This function is called by `org-babel-execute-src-block'."
         (output (cdr (assoc :output ret))))
     (if (eq result-type 'output)
         output
-      (ob-ipython--create-stdout-buffer output)
+      (ob-ipython--output output nil)
       (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
                               (list (cdr (assoc :value result))
                                     (cdr (assoc :display result))))
                         (remove-if-not nil))))))
 
-;;; TODO: we create a new image every time
 (defun ob-ipython--render (file-or-nil values)
   (let ((org (lambda (value) value))
         (png (lambda (value)
@@ -499,7 +544,6 @@ Make sure your src block has a :session param.")
             (substring rnd 20 32))))
 
 (defun ipython--async-replace-sentinel (sentinel buffer replacement)
-  ;; Make sentinel for post url-retrive
   (save-window-excursion
     (save-excursion
       (save-restriction
