@@ -64,7 +64,7 @@
   :group 'ob-ipython)
 
 (defcustom ob-ipython-client-path
-  (f-expand "./test.py"
+  (f-expand "./client.py"
             (or (-when-let (f load-file-name) (f-dirname f)) default-directory))
   "Path to the client script."
   :group 'ob-ipython)
@@ -266,7 +266,7 @@ a new kernel will be started."
   (with-temp-buffer
     (let ((ret (apply 'call-process-region code nil
                       (ob-ipython--get-python) nil t nil
-                      (list "--" ob-ipython-client-path "--conn-file" name))))
+                      (list "--" ob-ipython-client-path "--conn-file" name "--execute"))))
       (if (> ret 0)
           (ob-ipython--dump-error (buffer-string))
         (goto-char (point-min))
@@ -276,7 +276,7 @@ a new kernel will be started."
   (let ((proc (ob-ipython--create-process
                "execute"
                (list (ob-ipython--get-python)
-                     "--" ob-ipython-client-path "--conn-file" name))))
+                     "--" ob-ipython-client-path "--conn-file" name "--execute"))))
     ;; TODO: maybe add a way of disabling streaming output?
     ;; TODO: cleanup and break out - we parse twice, can we parse once?
     (set-process-filter
@@ -368,20 +368,18 @@ a new kernel will be started."
 ;; inspection
 
 (defun ob-ipython--inspect-request (code &optional pos detail)
-  (let ((url-request-data (json-encode `((code . ,code)
-                                         (pos . ,(or pos (length code)))
-                                         (detail . ,(or detail 0)))))
-        (url-request-method "POST"))
-    (with-current-buffer (url-retrieve-synchronously
-                          ;; TODO: hardcoded the default session here
-                          (format "http://%s:%d/inspect/default"
-                                  ob-ipython-driver-hostname
-                                  ob-ipython-driver-port))
-      (if (>= (url-http-parse-response) 400)
-          (ob-ipython--dump-error (buffer-string))
-        (goto-char url-http-end-of-headers)
-        (let ((json-array-type 'list))
-          (json-read))))))
+  (let ((input (json-encode `((code . ,code)
+                              (pos . ,(or pos (length code)))
+                              (detail . ,(or detail 0))))))
+    (with-temp-buffer
+      (let ((ret (apply 'call-process-region input nil
+                        (ob-ipython--get-python) nil t nil
+                        ;; TODO: hardcoded default
+                        (list "--" ob-ipython-client-path "--conn-file" "default" "--inspect"))))
+        (if (> ret 0)
+            (ob-ipython--dump-error (buffer-string))
+          (goto-char (point-min))
+          (ob-ipython--collect-json))))))
 
 (defun ob-ipython--inspect (buffer pos)
   (let* ((code (with-current-buffer buffer

@@ -48,12 +48,23 @@ def create_client(name):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--conn-file')
+parser.add_argument('--execute', action='store_true')
+parser.add_argument('--inspect', action='store_true')
 args = parser.parse_args()
 
 c = create_client(args.conn_file)
 
 with interested_lock:
-    msgid = c.execute(sys.stdin.read(), allow_stdin=False)
-    interested.append(msgid)
+    if args.execute:
+        msgid = c.execute(sys.stdin.read(), allow_stdin=False)
+        interested.append(msgid)
+
+    elif args.inspect:
+        req = json.loads(sys.stdin.read())
+        code = req['code']
+        msgid = c.inspect(code,
+                          cursor_pos=req.get('pos', len(code)),
+                          detail_level=req.get('detail', 0))
+        interested.append(msgid)
 
 semaphore.acquire()
