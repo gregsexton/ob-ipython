@@ -173,9 +173,11 @@ can be displayed.")
           procs)))
 
 (defun ob-ipython--launch-driver (name &rest args)
-  (let* ((python (locate-file (if (eq system-type 'windows-nt)
-                                  "python.exe"
-                                (or python-shell-interpreter "python"))
+  (let* ((python-candidate (if (eq system-type 'windows-nt)
+                               "python.exe"
+                             "python"))
+         (python (locate-file (or python-shell-interpreter
+                                  python-candidate)
                               exec-path))
          (pargs (append (list python "--" ob-ipython-driver-path) args)))
     (ob-ipython--create-process name pargs)
