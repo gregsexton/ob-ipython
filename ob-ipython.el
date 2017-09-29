@@ -49,20 +49,6 @@
   "List of extra args to pass when creating a kernel."
   :group 'ob-ipython)
 
-(defcustom ob-ipython-driver-port 9988
-  "Port to use for http driver."
-  :group 'ob-ipython)
-
-(defcustom ob-ipython-driver-hostname "localhost"
-  "Hostname to use for http driver."
-  :group 'ob-ipython)
-
-(defcustom ob-ipython-driver-path
-  (f-expand "./driver.py"
-            (or (-when-let (f load-file-name) (f-dirname f)) default-directory))
-  "Path to the driver script."
-  :group 'ob-ipython)
-
 (defcustom ob-ipython-client-path
   (f-expand "./client.py"
             (or (-when-let (f load-file-name) (f-dirname f)) default-directory))
@@ -127,8 +113,6 @@ can be displayed.")
       (let ((inhibit-read-only t))
         (erase-buffer)))))
 
-;;; TODO: need to rename and maybe have a separate one for stderr so
-;;; it can be coloured
 (defun ob-ipython--output (output append-p)
   (when (not (s-blank? output))
     (save-excursion
@@ -165,9 +149,11 @@ can be displayed.")
     (format "emacs-%s.json" name)))
 
 (defun ob-ipython--kernel-repl-cmd (name)
-  (list ob-ipython-command "console" "--existing"
+  (list ob-ipython-command "console" "--simple-prompt" "--existing"
         (ob-ipython--kernel-file name)))
 
+;;; TODO: could setup a default sentinel that outputs error on process
+;;; early termination
 (defun ob-ipython--create-process (name cmd)
   (let ((buf (get-buffer-create (format "*ob-ipython-%s*" name))))
     (with-current-buffer buf (erase-buffer))
@@ -179,16 +165,17 @@ can be displayed.")
   (or python-shell-interpreter "python"))
                exec-path))
 
-(defun ob-ipython--create-kernel-driver (name &optional kernel)
+(defun ob-ipython--create-kernel (name &optional kernel)
   (when (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
-    (apply 'ob-ipython--launch-driver
-           (append (list (format "kernel-%s" name))
-                   (list "--conn-file" (ob-ipython--kernel-file name))
-                   (if kernel (list "--kernel" kernel) '())
-                   ;;should be last in the list of args
-                   (if ob-ipython-kernel-extra-args
-                       (list "--") '())
-                   ob-ipython-kernel-extra-args))))
+    (ob-ipython--create-process
+     (format "kernel-%s" name)
+     (append 
+      (list ob-ipython-command "console" "--simple-prompt")
+      (list "-f" (ob-ipython--kernel-file name))
+      (if kernel (list "--kernel" kernel) '())
+      ;;should be last in the list of args
+      ob-ipython-kernel-extra-args))
+    (sleep-for 1)))
 
 (defun ob-ipython--get-kernel-processes ()
   (let ((procs (-filter (lambda (p)
@@ -199,30 +186,9 @@ can be displayed.")
                 procs)
           procs)))
 
-(defun ob-ipython--launch-driver (name &rest args)
-  (let ((pargs (append (list (ob-ipython--get-python) "--" ob-ipython-driver-path) args)))
-    (ob-ipython--create-process name pargs)
-    ;; give kernel time to initialize and write connection file
-    (sleep-for 1)))
-
-(defun ob-ipython--create-client-driver ()
-  (when (not (ignore-errors (process-live-p (ob-ipython--get-driver-process))))
-    (ob-ipython--launch-driver "client-driver" "--port"
-                               (number-to-string ob-ipython-driver-port))
-    ;; give driver a chance to bind to a port and start serving
-    ;; requests. so horrible; so effective.
-    (sleep-for 1)))
-
-(defun ob-ipython--get-driver-process ()
-  (get-process "client-driver"))
-
 (defun ob-ipython--create-repl (name)
-  ;; TODO: hack while we wait on
-  ;; https://github.com/jupyter/jupyter_console/issues/93
-  (let ((prev (getenv "JUPYTER_CONSOLE_TEST")))
-    (setenv "JUPYTER_CONSOLE_TEST" "1")
+  (let ((python-shell-completion-native-enable nil))
     (run-python (s-join " " (ob-ipython--kernel-repl-cmd name)) nil nil)
-    (setenv "JUPYTER_CONSOLE_TEST" prev)
     (format "*%s*" python-shell-buffer-name)))
 
 ;; kernel management
@@ -234,6 +200,7 @@ can be displayed.")
         cdr
         list)))
 
+;;; TODO: broken
 (defun ob-ipython-interrupt-kernel (proc)
   "Interrupt a running kernel. Useful for terminating infinite
 loops etc. If things get really desparate try `ob-ipython-kill-kernel'."
@@ -248,7 +215,6 @@ a new kernel will be started."
   (interactive (ob-ipython--choose-kernel))
   (when proc
     (delete-process proc)
-    (-when-let (p (ob-ipython--get-driver-process)) (delete-process p))
     (message (format "Killed %s" (process-name proc)))))
 
 ;; evaluation
@@ -429,7 +395,8 @@ This function is called by `org-babel-execute-src-block'."
          (session (cdr (assoc :session params)))
          (result-type (cdr (assoc :result-type params)))
          (sentinel (ipython--async-gen-sentinel)))
-    (org-babel-ipython-initiate-session session)
+    (ob-ipython--create-kernel (ob-ipython--normalize-session session)
+                               (cdr (assoc :kernel params)))
     (ob-ipython--execute-request-async
      (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                     params (org-babel-variable-assignments:python params))
@@ -444,7 +411,8 @@ This function is called by `org-babel-execute-src-block'."
   (let* ((file (cdr (assoc :ipyfile params)))
          (session (cdr (assoc :session params)))
          (result-type (cdr (assoc :result-type params))))
-    (org-babel-ipython-initiate-session session params)
+    (ob-ipython--create-kernel (ob-ipython--normalize-session session)
+                               (cdr (assoc :kernel params)))
     (-when-let (ret (ob-ipython--eval
                      (ob-ipython--execute-request
                       (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
@@ -509,10 +477,9 @@ VARS contains resolved variable references"
   (if (string= session "none")
       (error "ob-ipython currently only supports evaluation using a session.
 Make sure your src block has a :session param.")
-    (ob-ipython--create-client-driver)
     (when (not (s-ends-with-p ".json" session))
-      (ob-ipython--create-kernel-driver (ob-ipython--normalize-session session)
-                                        (cdr (assoc :kernel params))))
+      (ob-ipython--create-kernel (ob-ipython--normalize-session session)
+                                 (cdr (assoc :kernel params))))
     (ob-ipython--create-repl (ob-ipython--normalize-session session))))
 
 ;; async
