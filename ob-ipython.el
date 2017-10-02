@@ -424,7 +424,7 @@ This function is called by `org-babel-execute-src-block'."
                  (format "[[file:%s]]" file))))
         (svg (lambda (value)
                (let ((file (or file-or-nil (ob-ipython--generate-file-name ".svg"))))
-                 (ob-ipython--write-base64-string file value)
+                 (ob-ipython--write-string-to-file file value)
                  (format "[[file:%s]]" file))))
         (html (lambda (value)
                 ;; ((eq (car value) 'text/html)
