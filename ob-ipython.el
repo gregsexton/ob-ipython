@@ -340,8 +340,10 @@ a new kernel will be started."
     (with-temp-buffer
       (let ((ret (apply 'call-process-region input nil
                         (ob-ipython--get-python) nil t nil
-                        ;; TODO: hardcoded default -- can use local org-src--babel-info
-                        (list "--" ob-ipython-client-path "--conn-file" "default" "--inspect"))))
+                        (list "--" ob-ipython-client-path
+                              "--conn-file"
+                              (ob-ipython--get-session-from-edit-buffer (current-buffer))
+                              "--inspect"))))
         (if (> ret 0)
             (ob-ipython--dump-error (buffer-string))
           (goto-char (point-min))
@@ -379,8 +381,9 @@ a new kernel will be started."
     (with-temp-buffer
       (let ((ret (apply 'call-process-region input nil
                         (ob-ipython--get-python) nil t nil
-                        ;; TODO: hardcoded default
-                        (list "--" ob-ipython-client-path "--conn-file" "default" "--complete"))))
+                        (list "--" ob-ipython-client-path "--conn-file"
+                              (ob-ipython--get-session-from-edit-buffer (current-buffer))
+                              "--complete"))))
         (if (> ret 0)
             (ob-ipython--dump-error (buffer-string))
           (goto-char (point-min))
@@ -436,8 +439,16 @@ a new kernel will be started."
 
 (defun ob-ipython--normalize-session (session)
   (if (string= "default" session)
-    (error "default is reserved for when no name is provided. Please use a different session name.")
-  (or session "default")))
+      (error "default is reserved for when no name is provided. Please use a different session name.")
+    (or session "default")))
+
+(defun ob-ipython--get-session-from-edit-buffer (buffer)
+  (with-current-buffer buffer
+    (->> org-src--babel-info
+         (nth 2)
+         (assoc :session)
+         cdr
+         ob-ipython--normalize-session)))
 
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
