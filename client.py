@@ -9,26 +9,31 @@ find_connection_file = client.find_connection_file
 semaphore = threading.Semaphore(value=0)
 interested_lock = threading.Lock()
 interested = []
-hasreply = False
-hasidle = False
 
-def msg_router(name, ch):
-    global hasreply, hasidle
+def msg_router(io, shell):
     while True:
-        msg = ch()
-        msg['channel'] = name
+        msg = io()
+        msg['channel'] = 'io'
         msgid = msg['parent_header'].get('msg_id', None)
         with interested_lock:
             if msgid not in interested:
                 continue
-        if msg.get('msg_type', '') in ['execute_reply', 'inspect_reply']:
-            hasreply = True
-        elif (msg.get('msg_type', '') == 'status' and
+        print(json.dumps(msg, default=str))
+        if (msg.get('msg_type', '') == 'status' and
             msg['content']['execution_state'] == 'idle'):
-            hasidle = True
-        if not msg['msg_type'] in ['status', 'execute_input']:
-            print(json.dumps(msg, default=str))
-        if hasreply and hasidle:
+            break
+
+    while True:
+        msg = shell()
+        msg['channel'] = 'shell'
+        msgid = msg['parent_header'].get('msg_id', None)
+        with interested_lock:
+            if msgid not in interested:
+                continue
+        print(json.dumps(msg, default=str))
+        if msg.get('msg_type', '') in ['execute_reply',
+                                       'inspect_reply',
+                                       'complete_reply']:
             semaphore.release()
 
 def create_client(name):
@@ -39,17 +44,17 @@ def create_client(name):
     c = client.BlockingKernelClient(connection_file=cf)
     c.load_connection_file()
     c.start_channels()
-    chans = [('io', c.get_iopub_msg), ('shell', c.get_shell_msg), ('stdin', c.get_stdin_msg)]
-    for name, ch in chans:
-        t = threading.Thread(target=msg_router, args=(name, ch))
-        t.setDaemon(True)
-        t.start()
+    io, shell = c.get_iopub_msg, c.get_shell_msg
+    t = threading.Thread(target=msg_router, args=(io, shell))
+    t.setDaemon(True)
+    t.start()
     return c
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--conn-file')
 parser.add_argument('--execute', action='store_true')
 parser.add_argument('--inspect', action='store_true')
+parser.add_argument('--complete', action='store_true')
 args = parser.parse_args()
 
 c = create_client(args.conn_file)
@@ -65,6 +70,18 @@ with interested_lock:
         msgid = c.inspect(code,
                           cursor_pos=req.get('pos', len(code)),
                           detail_level=req.get('detail', 0))
+        interested.append(msgid)
+
+    elif args.complete:
+        req = json.loads(sys.stdin.read())
+        code = req['code']
+        pos = req.get('pos', len(code))
+        # causes things to hang as kernel doesn't come back with a
+        # complete_reply
+        if code[pos-1] in ['\n', '\r']:
+            sys.exit(0)
+        msgid = c.complete(code,
+                           cursor_pos=pos)
         interested.append(msgid)
 
 semaphore.acquire()

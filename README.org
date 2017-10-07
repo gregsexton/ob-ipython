@@ -157,19 +157,24 @@
      SRC block, place the point on the thing you're interested in and
      run =M-x ob-ipython-inspect=. I recommend you bind this to a key.
 
+   * ~ob-ipython-completions~ queries the kernel for completions at a
+     position. You may use this to hook up any completion mechanism.
+     We already provide a company backend. With company installed, add
+     ~(add-to-list 'company-backends 'company-ob-ipython)~ somewhere
+     in your config. This should then work while editing a src block.
+
    * It's often easier to play with code using a REPL. With the point
      in an ipython SRC block, you can open a REPL connected to the
-     current kernel by running =C-c C-v C-z=. I recommend you do this
-     anyway, as python-mode can now use this REPL to provide
-     completion in code buffers.
+     current kernel by running =C-c C-v C-z=.
 
    * If evaluated code produces an error, this will be displayed
      nicely in a buffer using IPython's traceback support.
 
-   * Stdout from code evaluation is displayed in a popup buffer. This
-     is great for debugging or getting verbose output that is best
-     left out of documents. If you wish to capture stdout in your
-     document use the =:results output= SRC block header.
+   * Stdout/err from code evaluation is displayed in a popup buffer.
+     This is great for debugging or getting verbose output that is
+     best left out of documents (e.g progress updates). If you wish to
+     capture output in your document use the =:results output= SRC
+     block header.
 
    * You can interrupt or kill a running kernel. This is helpful if
      things get stuck or really broken. See =M-x
@@ -213,8 +218,6 @@
        ;;; display/update images in the buffer after I evaluate
        (add-hook 'org-babel-after-execute-hook 'org-display-inline-images 'append)
      #+END_SRC
-
-   * Open a REPL using =C-c C-v C-z= so that you get completion in Python buffers.
 
    * Export with the =LaTeX= backend using the =minted= package for
      source block highlighting fails for =ipython= blocks by default

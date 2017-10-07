@@ -317,7 +317,7 @@ a new kernel will be started."
 
 (defun ob-ipython--extract-status (msgs)
   (->> msgs
-       (-filter (lambda (msg) (-contains? '("execute_reply" "inspect_reply")
+       (-filter (lambda (msg) (-contains? '("execute_reply" "inspect_reply" "complete_reply")
                                           (cdr (assoc 'msg_type msg)))))
        car
        (assoc 'content)
@@ -340,7 +340,7 @@ a new kernel will be started."
     (with-temp-buffer
       (let ((ret (apply 'call-process-region input nil
                         (ob-ipython--get-python) nil t nil
-                        ;; TODO: hardcoded default
+                        ;; TODO: hardcoded default -- can use local org-src--babel-info
                         (list "--" ob-ipython-client-path "--conn-file" "default" "--inspect"))))
         (if (> ret 0)
             (ob-ipython--dump-error (buffer-string))
@@ -368,8 +368,61 @@ a new kernel will be started."
   "Ask a kernel for documentation on the thing at POS in BUFFER."
   (interactive (list (current-buffer) (point)))
   (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
-      (ob-ipython--create-inspect-buffer result)
-    (message "No documentation was found.")))
+    (ob-ipython--create-inspect-buffer result)
+  (message "No documentation was found.")))
+
+;; completion
+
+(defun ob-ipython--complete-request (code &optional pos)
+  (let ((input (json-encode `((code . ,code)
+                              (pos . ,(or pos (length code)))))))
+    (with-temp-buffer
+      (let ((ret (apply 'call-process-region input nil
+                        (ob-ipython--get-python) nil t nil
+                        ;; TODO: hardcoded default
+                        (list "--" ob-ipython-client-path "--conn-file" "default" "--complete"))))
+        (if (> ret 0)
+            (ob-ipython--dump-error (buffer-string))
+          (goto-char (point-min))
+          (ob-ipython--collect-json))))))
+
+(defun ob-ipython-completions (buffer pos)
+  "Ask a kernel for completions on the thing at POS in BUFFER."
+  (let* ((code (with-current-buffer buffer
+                 (buffer-substring-no-properties (point-min) (point-max))))
+         (resp (ob-ipython--complete-request code pos))
+         (status (ob-ipython--extract-status resp)))
+    (if (not (string= "ok" status))
+        '()
+      (->> resp
+           (-filter (lambda (msg)
+                      (-contains? '("complete_reply")
+                                  (cdr (assoc 'msg_type msg)))))
+           (-mapcat (lambda (msg)
+                      (->> msg
+                           (assoc 'content)
+                           cdr)))))))
+
+(defun company-ob-ipython (command &optional arg &rest ignored)
+  (interactive (list 'interactive))
+  (cl-case command
+    (interactive (company-begin-backend 'company-ob-ipython))
+    (prefix (and
+             ob-ipython-mode
+             (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
+               (substring (buffer-string) (cdr (assoc 'cursor_start res))
+                          (cdr (assoc 'cursor_end res))))))
+    (candidates (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
+                  (cdr (assoc 'matches res))))
+    (sorted t)))
+
+;; mode
+
+(define-minor-mode ob-ipython-mode
+  ""
+  nil
+  " ipy"
+  '())
 
 ;; babel framework
 
@@ -377,10 +430,14 @@ a new kernel will be started."
 
 (defvar org-babel-default-header-args:ipython '())
 
+(defun org-babel-edit-prep:ipython (info)
+  ;; TODO: based on kernel, should change the mode
+  (ob-ipython-mode +1))
+
 (defun ob-ipython--normalize-session (session)
   (if (string= "default" session)
-      (error "default is reserved for when no name is provided. Please use a different session name.")
-    (or session "default")))
+    (error "default is reserved for when no name is provided. Please use a different session name.")
+  (or session "default")))
 
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
