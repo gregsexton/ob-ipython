@@ -219,6 +219,16 @@ a new kernel will be started."
 
 ;; evaluation
 
+(defvar ob-ipython--async-queue nil)
+
+(defun ob-ipython--enqueue (q x)
+  (set q (append (symbol-value q) (list x))))
+
+(defun ob-ipython--dequeue (q)
+  (let ((ret (car (symbol-value q))))
+    (set q (cdr (symbol-value q)))
+    ret))
+
 (defun ob-ipython--collect-json ()
   ;; this function assumes that we're in a buffer with the json lines
   (let ((json-array-type 'list))
@@ -228,17 +238,10 @@ a new kernel will be started."
         (forward-line))
       (nreverse acc))))
 
-(defun ob-ipython--execute-request (code name)
-  (with-temp-buffer
-    (let ((ret (apply 'call-process-region code nil
-                      (ob-ipython--get-python) nil t nil
-                      (list "--" ob-ipython-client-path "--conn-file" name "--execute"))))
-      (if (> ret 0)
-          (ob-ipython--dump-error (buffer-string))
-        (goto-char (point-min))
-        (ob-ipython--collect-json)))))
+(defun ob-ipython--running-p ()
+  (get-process "execute"))
 
-(defun ob-ipython--execute-request-async (code name callback args)
+(defun ob-ipython--run-async (code name callback args)
   (let ((proc (ob-ipython--create-process
                "execute"
                (list (ob-ipython--get-python)
@@ -249,15 +252,15 @@ a new kernel will be started."
      proc
      (lexical-let ((parse-pos 0))
        (lambda (proc output)
-         ;; not guaranteed to be given lines - we need to handle buffering
-         (with-current-buffer (process-buffer proc)
+  ;; not guaranteed to be given lines - we need to handle buffering
+  (with-current-buffer (process-buffer proc)
            (goto-char (point-max))
            (insert output)
            (let ((json-array-type 'list))
              (goto-char parse-pos)
              (while (not (= (point) (point-max)))
                (condition-case nil
-                   (progn (-> (json-read)
+    (progn (-> (json-read)
                               list
                               ob-ipython--extract-output
                               (ob-ipython--output t))
@@ -269,15 +272,36 @@ a new kernel will be started."
      (lexical-let ((callback callback)
                    (args args))
        (lambda (proc state)
-         (when (not (process-live-p proc))
+  (when (not (process-live-p proc))
            (with-current-buffer (process-buffer proc)
              (goto-char (point-min))
              (apply callback (-> (ob-ipython--collect-json)
                                  ob-ipython--eval
-                                 (cons args))))))))
+                                 (cons args))))
+           (ob-ipython--maybe-run-async)))))
     (process-send-string proc code)
     (process-send-string proc "\n")
     (process-send-eof proc)))
+
+(defun ob-ipython--maybe-run-async ()
+  (when (not (ob-ipython--running-p))
+    (when-let (val (ob-ipython--dequeue 'ob-ipython--async-queue))
+      (cl-destructuring-bind (code name callback args) val
+        (ob-ipython--run-async code name callback args)))))
+
+(defun ob-ipython--execute-request-async (code name callback args)
+  (ob-ipython--enqueue 'ob-ipython--async-queue (list code name callback args))
+  (ob-ipython--maybe-run-async))
+
+(defun ob-ipython--execute-request (code name)
+  (with-temp-buffer
+    (let ((ret (apply 'call-process-region code nil
+                      (ob-ipython--get-python) nil t nil
+                      (list "--" ob-ipython-client-path "--conn-file" name "--execute"))))
+      (if (> ret 0)
+          (ob-ipython--dump-error (buffer-string))
+        (goto-char (point-min))
+        (ob-ipython--collect-json)))))
 
 (defun ob-ipython--extract-output (msgs)
   (->> msgs
