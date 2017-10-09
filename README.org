@@ -158,7 +158,7 @@ use this tunnel.
 
 Essentially the instructions boil down to
 
-- scp the remote json file over (will be in /run/user/*/jupyter/)
+- scp the remote json file over (will be in =/run/user/*/jupyter/=)
 - use =jupyter console --existing ./kernel-remote.json --ssh
   remote-host= to connect locally. This will give you a prompt that
   should allow you to evaluate expressions locally but have them run
