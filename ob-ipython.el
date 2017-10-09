@@ -166,7 +166,8 @@ can be displayed.")
                exec-path))
 
 (defun ob-ipython--create-kernel (name &optional kernel)
-  (when (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
+  (when (and (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
+             (not (s-ends-with-p ".json" name)))
     (ob-ipython--create-process
      (format "kernel-%s" name)
      (append 
