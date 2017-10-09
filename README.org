@@ -91,8 +91,8 @@
      ,#+END_SRC
    #+END_SRC
 
-   If you provide a file argument, this will be used instead of
-   generating one.
+   If you provide an ipyfile argument, this filename will be used
+   instead of generating one.
 
    #+BEGIN_SRC org
      ,#+BEGIN_SRC ipython :session :ipyfile /tmp/image.png :exports both :results raw drawer
@@ -149,6 +149,24 @@
        plt.hist(np.random.randn(20000), bins=200)
      ,#+END_SRC
    #+END_SRC
+
+** Working with a remote session
+
+First, follow the instructions [[https://github.com/ipython/ipython/wiki/Cookbook:-Connecting-to-a-remote-kernel-via-ssh][here]] to get access to a remote kernel.
+You can then pass the name of the local json file as a session arg to
+use this tunnel.
+
+Essentially the instructions boil down to
+
+- scp the remote json file over (will be in /run/user/*/jupyter/)
+- use =jupyter console --existing ./kernel-remote.json --ssh
+  remote-host= to connect locally. This will give you a prompt that
+  should allow you to evaluate expressions locally but have them run
+  on the remote machine.
+- use the newly created local config file printed by the previous step
+  as the argument to =:session=. Be sure to include the =.json= suffix
+  so that ob-ipython knows to use this as the config rather than
+  spawning a new session.
 
 ** What features are there outside of Org SRC block evaluation?
 
