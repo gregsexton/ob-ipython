@@ -115,19 +115,24 @@ can be displayed.")
 
 (defun ob-ipython--output (output append-p)
   (when (not (s-blank? output))
-    (save-excursion
-      (let ((buf (get-buffer-create "*ob-ipython-out*")))
-        (with-current-buffer buf
-          (special-mode)
-          (let ((inhibit-read-only t))
-            (unless append-p (erase-buffer))
-            (let ((p (point)))
-              (insert output)
-              (ansi-color-apply-on-region p (point-max))
-              ;; this adds some support for control chars
-              (comint-carriage-motion p (point-max)))
-            (unless append-p (goto-char (point-min)))))
-        (pop-to-buffer buf)))))
+    (let ((buf (get-buffer-create "*ob-ipython-out*")))
+      (with-current-buffer buf
+        (special-mode)
+        (let ((inhibit-read-only t))
+          (unless append-p (erase-buffer))
+          (when (s-blank? (buffer-string)) (pop-to-buffer buf))
+          (let ((p (point)))
+            (if (= p (point-max))     ;allow tailing
+                (progn (insert output)
+                       (-when-let (w (get-buffer-window buf 'visible))
+                         (set-window-point w (point-max))))
+              (save-excursion
+                (goto-char (point-max))
+                (insert output)))
+            (ansi-color-apply-on-region p (point-max))
+            ;; this adds some support for control chars
+            (comint-carriage-motion p (point-max)))
+          (unless append-p (goto-char (point-min))))))))
 
 (defun ob-ipython--dump-error (err-msg)
   (with-current-buffer (get-buffer-create "*ob-ipython-debug*")
