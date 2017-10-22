@@ -175,7 +175,7 @@ can be displayed.")
              (not (s-ends-with-p ".json" name)))
     (ob-ipython--create-process
      (format "kernel-%s" name)
-     (append 
+     (append
       (list ob-ipython-command "console" "--simple-prompt")
       (list "-f" (ob-ipython--kernel-file name))
       (if kernel (list "--kernel" kernel) '())
@@ -488,6 +488,12 @@ This function is called by `org-babel-execute-src-block'."
       (ob-ipython--execute-async body params)
     (ob-ipython--execute-sync body params)))
 
+(defun ob-ipython--expand-body (body params)
+  (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
+                                 params
+                                 (mapcar (lambda (v) (encode-coding-string v 'utf-8))
+                                         (org-babel-variable-assignments:python params))))
+
 (defun ob-ipython--execute-async (body params)
   (let* ((file (cdr (assoc :ipyfile params)))
          (session (cdr (assoc :session params)))
@@ -496,8 +502,7 @@ This function is called by `org-babel-execute-src-block'."
     (ob-ipython--create-kernel (ob-ipython--normalize-session session)
                                (cdr (assoc :kernel params)))
     (ob-ipython--execute-request-async
-     (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
-                                    params (org-babel-variable-assignments:python params))
+     (ob-ipython--expand-body body params)
      (ob-ipython--normalize-session session)
      (lambda (ret sentinel buffer file result-type)
        (let ((replacement (ob-ipython--process-response ret file result-type)))
@@ -513,8 +518,7 @@ This function is called by `org-babel-execute-src-block'."
                                (cdr (assoc :kernel params)))
     (-when-let (ret (ob-ipython--eval
                      (ob-ipython--execute-request
-                      (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
-                                                     params (org-babel-variable-assignments:python params))
+                      (ob-ipython--expand-body body params)
                       (ob-ipython--normalize-session session))))
       (ob-ipython--process-response ret file result-type))))
 
