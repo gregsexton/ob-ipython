@@ -193,9 +193,18 @@ can be displayed.")
           procs)))
 
 (defun ob-ipython--create-repl (name)
-  (let ((python-shell-completion-native-enable nil))
-    (run-python (s-join " " (ob-ipython--kernel-repl-cmd name)) nil nil)
-    (format "*%s*" python-shell-buffer-name)))
+  (let ((python-shell-completion-native-enable nil)
+        (cmd (s-join " " (ob-ipython--kernel-repl-cmd name))))
+    (if (string= "default" name)
+        ;; Create a default global Python repl.
+        (progn
+          (run-python cmd nil nil)
+          (format "*%s*" python-shell-buffer-name))
+      ;; Create a dedicated session repl.
+      (let ((process-name (format "Python:%s" name)))
+        (get-buffer-process
+         (python-shell-make-comint cmd process-name nil))
+        (format "*%s*" process-name)))))
 
 ;; kernel management
 
