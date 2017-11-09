@@ -360,65 +360,57 @@ a new kernel will be started."
 
 (add-to-list 'org-src-lang-modes '("ipython" . python))
 
+(defvar ob-ipython-configured-kernels nil)
+
 ;; Configure jupyter-<language> blocks for each installed kernel
-(defun ob-ipython-detect-kernels (&optional replace)
-  "Detect jupyter kernels if they are not specified in `ob-ipython-active-kernels`.
-   With optional `replace` replace`ob-ipython-active-kernels` even if it is
-   already populated."
-  (when (or replace (not ob-ipython-active-kernels))
-    (let ((jupyter-executable (executable-find "jupyter")))
-      (when jupyter-executable
-        (let ((jupyter-kernelspec-json
-               (cdr (car (json-read-from-string
-                          (shell-command-to-string
-                           (concat jupyter-executable
-                                   " kernelspec list --json")))))))
-          (let ((jupyter-kernelspecs nil))
-            (dolist (x jupyter-kernelspec-json)
-              (add-to-list 'jupyter-kernelspecs
-                           (list (car x) (cdr (assoc 'language (assoc 'spec x))))))
-            (defcustom ob-ipython-active-kernels jupyter-kernelspecs
-              "A `plist` containing language and kernel name pairs.
-   This list is used by `ob-ipython-auto-configure-kernels` to configure
-   org-bable to execute juypter kernel blocks and to associate jupyter kernal
-   blocks with the correct emacs mode for editing."
-              :group 'ob-ipython)
-           ; (setq ob-ipython-active-kernels jupyter-kernelspecs)
-            ))))))
+(defun ob-ipython-get-kernels ()
+  "Return a list of available jupyter kernels and their corresponding languages.
 
-(ob-ipython-detect-kernels t)
+The elements of the list have the form (\"kernel\" \"language\")."
+  (and (executable-find "jupyter")
+       (let ((kernelspecs (cdar (json-read-from-string
+                                 (shell-command-to-string
+                                  "jupyter kernelspec list --json")))))
+         (-map (lambda (spec)
+                 (cons (symbol-name (car spec))
+                       (->> (cdr spec)
+                            (assoc 'spec)
+                            cdr
+                            (assoc 'language)
+                            cdr)))
+               kernelspecs))))
 
-(defun ob-ipython-configure-kernel (kernel language)
+(defun ob-ipython-configure-kernel (kernel-lang)
   "Configure org mode to use specified kernel."
-  (set (intern (format "org-babel-default-header-args:jupyter-%S"
-                       (intern language)))
-       `((:session . ,language)
-         (:kernel . ,kernel)
-         (:results . "output")))
-  (defalias (intern (format "org-babel-execute:jupyter-%S"
-                            (intern language)))
-    'org-babel-execute:ipython)
-  (let ((orig-org-src-lang-mode (assoc language org-src-lang-modes)))
-    (if orig-org-src-lang-mode
-        (let ((new-org-src-lang-mode `(,(format "jupyter-%S"
-                                           (intern (car orig-org-src-lang-mode))) .
-                                           ,(cdr orig-org-src-lang-mode))))
-          (add-to-list 'org-src-lang-modes new-org-src-lang-mode))
-      (let ((new-org-src-lang-mode `(,(format "jupyter-%S"
-                                        (intern language)) .
-                                        ,(intern (replace-regexp-in-string
-                                                 "[0-9]*" ""
-                                                 language)))))
-        (add-to-list 'org-src-lang-modes new-org-src-lang-mode)))))
+  (let* ((kernel (car kernel-lang))
+         (language (cdr kernel-lang))
+         (jupyter-lang (concat "jupyter-" language))
+         (mode (intern (or (cdr (assoc language org-src-lang-modes))
+                           (replace-regexp-in-string "[0-9]*" "" language))))
+         (header-args (intern (concat "org-babel-default-header-args:" jupyter-lang))))
+    (add-to-list 'org-src-lang-modes `(,jupyter-lang . ,mode))
+    (unless (and (boundp header-args) (symbol-value header-args))
+      ;; Only set defaults if the corresponding variable is nil or does not
+      ;; exist yet.
+      (set (intern (concat "org-babel-default-header-args:" jupyter-lang))
+           `((:session . ,language)
+             (:kernel . ,kernel))))
+    (defalias (intern (concat "org-babel-execute:" jupyter-lang))
+      'org-babel-execute:ipython)
+    (defalias (intern (concat "org-babel-" jupyter-lang "-initiate-session"))
+      'org-babel-ipython-initiate-session)
+    kernel-lang))
 
 (defun ob-ipython-auto-configure-kernels (&optional replace)
-  "Detects jupyter kernels installed on your system and configures them for use in org-babel.
-   With &optional argument `replace` use auto-detected kernels, otherwise configure kernels
-   specified in `ob-ipython-active-kernels`."
-  (interactive)
-  (ob-ipython-detect-kernels replace)
-  (dolist (kernel ob-ipython-active-kernels)
-    (ob-ipython-configure-kernel (symbol-name (car kernel)) (car (cdr kernel)))))
+  "Auto-configure kernels for use with org-babel based on the
+available kernelspecs of the current jupyter installation. If
+REPLACE is non-nil, force configuring the kernels even if they
+have previously been configured."
+  (interactive (list t))
+  (when (or replace (not ob-ipython-configured-kernels))
+    (setq ob-ipython-configured-kernels
+          (->> (ob-ipython-get-kernels)
+               (-map 'ob-ipython-configure-kernel)))))
 
 (add-hook 'org-mode-hook 'ob-ipython-auto-configure-kernels)
 
