@@ -467,18 +467,17 @@ a new kernel will be started."
 ;; babel framework
 
 (add-to-list 'org-src-lang-modes '("ipython" . python))
+(add-hook 'org-mode-hook 'ob-ipython-auto-configure-kernels)
 
 (defvar ob-ipython-configured-kernels nil)
 
-;; Configure jupyter-<language> blocks for each installed kernel
-(defun ob-ipython-get-kernels ()
+(defun ob-ipython--get-kernels ()
   "Return a list of available jupyter kernels and their corresponding languages.
-
 The elements of the list have the form (\"kernel\" \"language\")."
-  (and (executable-find "jupyter")
+  (and ob-ipython-command
        (let ((kernelspecs (cdar (json-read-from-string
                                  (shell-command-to-string
-                                  "jupyter kernelspec list --json")))))
+                                  (s-concat ob-ipython-command " kernelspec list --json"))))))
          (-map (lambda (spec)
                  (cons (symbol-name (car spec))
                        (->> (cdr spec)
@@ -488,7 +487,7 @@ The elements of the list have the form (\"kernel\" \"language\")."
                             cdr)))
                kernelspecs))))
 
-(defun ob-ipython-configure-kernel (kernel-lang)
+(defun ob-ipython--configure-kernel (kernel-lang)
   "Configure org mode to use specified kernel."
   (let* ((kernel (car kernel-lang))
          (language (cdr kernel-lang))
@@ -497,9 +496,9 @@ The elements of the list have the form (\"kernel\" \"language\")."
                            (replace-regexp-in-string "[0-9]*" "" language))))
          (header-args (intern (concat "org-babel-default-header-args:" jupyter-lang))))
     (add-to-list 'org-src-lang-modes `(,jupyter-lang . ,mode))
+    ;; Only set defaults if the corresponding variable is nil or does not
+    ;; exist yet.
     (unless (and (boundp header-args) (symbol-value header-args))
-      ;; Only set defaults if the corresponding variable is nil or does not
-      ;; exist yet.
       (set (intern (concat "org-babel-default-header-args:" jupyter-lang))
            `((:session . ,language)
              (:kernel . ,kernel))))
@@ -517,10 +516,7 @@ have previously been configured."
   (interactive (list t))
   (when (or replace (not ob-ipython-configured-kernels))
     (setq ob-ipython-configured-kernels
-          (->> (ob-ipython-get-kernels)
-               (-map 'ob-ipython-configure-kernel)))))
-
-(add-hook 'org-mode-hook 'ob-ipython-auto-configure-kernels)
+          (-map 'ob-ipython--configure-kernel (ob-ipython--get-kernels)))))
 
 (defvar org-babel-default-header-args:ipython '())
 
