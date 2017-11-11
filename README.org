@@ -150,6 +150,28 @@
      ,#+END_SRC
    #+END_SRC
 
+** Experimental: Jupyter kernel support
+
+   This package is starting to transition from the original
+   ipython-only support to full jupyter support.
+
+   If you have other kernels installed, you should be able to evaluate
+   blocks by providing jupyter-X as the language, where X is the
+   language name recognised by jupyter. For example, you can do
+   something like this:
+
+   #+BEGIN_SRC org
+     ,#+BEGIN_SRC jupyter-R :results raw drawer
+       x <- 3
+       x
+     ,#+END_SRC
+   #+END_SRC
+
+   Notice, when providing languages like this, you do not need to
+   (although you may) provide a session argument. A default session is
+   created per language. This should also try to provide support for
+   per-language modes when editing.
+
 ** Working with a remote session
 
 First, follow the instructions [[https://github.com/ipython/ipython/wiki/Cookbook:-Connecting-to-a-remote-kernel-via-ssh][here]] to get access to a remote kernel.
