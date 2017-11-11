@@ -166,8 +166,8 @@ can be displayed.")
 
 (defun ob-ipython--get-python ()
   (locate-file (if (eq system-type 'windows-nt)
-    "python.exe"
-  (or python-shell-interpreter "python"))
+                   "python.exe"
+                 (or python-shell-interpreter "python"))
                exec-path))
 
 (defun ob-ipython--create-kernel (name &optional kernel)
@@ -196,11 +196,9 @@ can be displayed.")
   (let ((python-shell-completion-native-enable nil)
         (cmd (s-join " " (ob-ipython--kernel-repl-cmd name))))
     (if (string= "default" name)
-        ;; Create a default global Python repl.
         (progn
           (run-python cmd nil nil)
           (format "*%s*" python-shell-buffer-name))
-      ;; Create a dedicated session repl.
       (let ((process-name (format "Python:%s" name)))
         (get-buffer-process
          (python-shell-make-comint cmd process-name nil))
@@ -267,15 +265,15 @@ a new kernel will be started."
      proc
      (lexical-let ((parse-pos 0))
        (lambda (proc output)
-  ;; not guaranteed to be given lines - we need to handle buffering
-  (with-current-buffer (process-buffer proc)
+         ;; not guaranteed to be given lines - we need to handle buffering
+         (with-current-buffer (process-buffer proc)
            (goto-char (point-max))
            (insert output)
            (let ((json-array-type 'list))
              (goto-char parse-pos)
              (while (not (= (point) (point-max)))
                (condition-case nil
-    (progn (-> (json-read)
+                   (progn (-> (json-read)
                               list
                               ob-ipython--extract-output
                               (ob-ipython--output t))
@@ -287,7 +285,7 @@ a new kernel will be started."
      (lexical-let ((callback callback)
                    (args args))
        (lambda (proc state)
-  (when (not (process-live-p proc))
+         (when (not (process-live-p proc))
            (with-current-buffer (process-buffer proc)
              (goto-char (point-min))
              (apply callback (-> (ob-ipython--collect-json)
@@ -409,8 +407,8 @@ a new kernel will be started."
   "Ask a kernel for documentation on the thing at POS in BUFFER."
   (interactive (list (current-buffer) (point)))
   (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
-    (ob-ipython--create-inspect-buffer result)
-  (message "No documentation was found.")))
+      (ob-ipython--create-inspect-buffer result)
+    (message "No documentation was found.")))
 
 ;; completion
 
