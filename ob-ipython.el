@@ -371,10 +371,13 @@ a new kernel will be started."
 ;; inspection
 
 (defun ob-ipython--inspect-request (code &optional pos detail)
+  "Get jupyter client to inspect code, return JSON result."
   (let ((input (json-encode `((code . ,code)
                               (pos . ,(or pos (length code)))
                               (detail . ,(or detail 0))))))
     (with-temp-buffer
+      ;; this will call inspect on the jupyter_client with the whole code block and a pos
+      ;; according to jupyter_client docs, you can send a whole cell or a single statement
       (let ((ret (apply 'call-process-region input nil
                         (ob-ipython--get-python) nil t nil
                         (list "--" ob-ipython-client-path
@@ -386,10 +389,9 @@ a new kernel will be started."
           (goto-char (point-min))
           (ob-ipython--collect-json))))))
 
-(defun ob-ipython--inspect (buffer pos)
-  (let* ((code (with-current-buffer buffer
-                 (buffer-substring-no-properties (point-min) (point-max))))
-         (resp (ob-ipython--inspect-request code pos 0))
+(defun ob-ipython--inspect-code (code pos)
+  "Given a piece of code and a point position, return inspection results."
+  (let* ((resp (ob-ipython--inspect-request code pos 0))
          (status (ob-ipython--extract-status resp)))
     (if (string= "ok" status)
         (->> resp
@@ -402,6 +404,11 @@ a new kernel will be started."
                              (assoc 'data)
                              cdr))))
       (error (ob-ipython--extract-error resp)))))
+
+(defun ob-ipython--inspect (buffer pos)
+  (let* ((code (with-current-buffer buffer
+                 (buffer-substring-no-properties (point-min) (point-max)))))
+    (ob-ipython--inspect-code code pos)))
 
 (defun ob-ipython-inspect (buffer pos)
   "Ask a kernel for documentation on the thing at POS in BUFFER."
@@ -443,6 +450,13 @@ a new kernel will be started."
                            (assoc 'content)
                            cdr)))))))
 
+(defun ob-ipython--company-doc-buffer (doc)
+  "Make company-suggested doc-buffer with ansi-color support."
+  (let ((buf (company-doc-buffer doc)))
+    (with-current-buffer buf
+      (ansi-color-apply-on-region (point-min) (point-max)))
+    buf))
+
 (defun company-ob-ipython (command &optional arg &rest ignored)
   (interactive (list 'interactive))
   (cl-case command
@@ -454,7 +468,11 @@ a new kernel will be started."
                           (cdr (assoc 'cursor_end res))))))
     (candidates (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
                   (cdr (assoc 'matches res))))
-    (sorted t)))
+    (sorted t)
+    ;; use new ob-ipython--inspect-code to get documentation for the completion candidate
+    ;; company-mode should show this when the user presses f1 or C-h
+    (doc-buffer (ob-ipython--company-doc-buffer
+                 (cdr (assoc 'text/plain (ob-ipython--inspect-code arg (length arg))))))))
 
 ;; mode
 
