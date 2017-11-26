@@ -386,10 +386,9 @@ a new kernel will be started."
           (goto-char (point-min))
           (ob-ipython--collect-json))))))
 
-(defun ob-ipython--inspect (buffer pos)
-  (let* ((code (with-current-buffer buffer
-                 (buffer-substring-no-properties (point-min) (point-max))))
-         (resp (ob-ipython--inspect-request code pos 0))
+(defun ob-ipython--inspect (code pos)
+  "Given a piece of code and a point position, return inspection results."
+  (let* ((resp (ob-ipython--inspect-request code pos 0))
          (status (ob-ipython--extract-status resp)))
     (if (string= "ok" status)
         (->> resp
@@ -406,9 +405,13 @@ a new kernel will be started."
 (defun ob-ipython-inspect (buffer pos)
   "Ask a kernel for documentation on the thing at POS in BUFFER."
   (interactive (list (current-buffer) (point)))
-  (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
-      (ob-ipython--create-inspect-buffer result)
-    (message "No documentation was found.")))
+  (let ((code (with-current-buffer buffer
+                (buffer-substring-no-properties (point-min) (point-max)))))
+    (-if-let (result (->> (ob-ipython--inspect code pos)
+                          (assoc 'text/plain)
+                          cdr))
+        (ob-ipython--create-inspect-buffer result)
+      (message "No documentation was found."))))
 
 ;; completion
 
@@ -443,6 +446,13 @@ a new kernel will be started."
                            (assoc 'content)
                            cdr)))))))
 
+(defun ob-ipython--company-doc-buffer (doc)
+  "Make company-suggested doc-buffer with ansi-color support."
+  (let ((buf (company-doc-buffer doc)))
+    (with-current-buffer buf
+      (ansi-color-apply-on-region (point-min) (point-max)))
+    buf))
+
 (defun company-ob-ipython (command &optional arg &rest ignored)
   (interactive (list 'interactive))
   (cl-case command
@@ -454,7 +464,9 @@ a new kernel will be started."
                           (cdr (assoc 'cursor_end res))))))
     (candidates (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
                   (cdr (assoc 'matches res))))
-    (sorted t)))
+    (sorted t)
+    (doc-buffer (ob-ipython--company-doc-buffer
+                 (cdr (assoc 'text/plain (ob-ipython--inspect arg (length arg))))))))
 
 ;; mode
 
