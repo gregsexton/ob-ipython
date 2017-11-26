@@ -371,13 +371,10 @@ a new kernel will be started."
 ;; inspection
 
 (defun ob-ipython--inspect-request (code &optional pos detail)
-  "Get jupyter client to inspect code, return JSON result."
   (let ((input (json-encode `((code . ,code)
                               (pos . ,(or pos (length code)))
                               (detail . ,(or detail 0))))))
     (with-temp-buffer
-      ;; this will call inspect on the jupyter_client with the whole code block and a pos
-      ;; according to jupyter_client docs, you can send a whole cell or a single statement
       (let ((ret (apply 'call-process-region input nil
                         (ob-ipython--get-python) nil t nil
                         (list "--" ob-ipython-client-path
@@ -389,7 +386,7 @@ a new kernel will be started."
           (goto-char (point-min))
           (ob-ipython--collect-json))))))
 
-(defun ob-ipython--inspect-code (code pos)
+(defun ob-ipython--inspect (code pos)
   "Given a piece of code and a point position, return inspection results."
   (let* ((resp (ob-ipython--inspect-request code pos 0))
          (status (ob-ipython--extract-status resp)))
@@ -405,17 +402,16 @@ a new kernel will be started."
                              cdr))))
       (error (ob-ipython--extract-error resp)))))
 
-(defun ob-ipython--inspect (buffer pos)
-  (let* ((code (with-current-buffer buffer
-                 (buffer-substring-no-properties (point-min) (point-max)))))
-    (ob-ipython--inspect-code code pos)))
-
 (defun ob-ipython-inspect (buffer pos)
   "Ask a kernel for documentation on the thing at POS in BUFFER."
   (interactive (list (current-buffer) (point)))
-  (-if-let (result (->> (ob-ipython--inspect buffer pos) (assoc 'text/plain) cdr))
-      (ob-ipython--create-inspect-buffer result)
-    (message "No documentation was found.")))
+  (let ((code (with-current-buffer buffer
+                (buffer-substring-no-properties (point-min) (point-max)))))
+    (-if-let (result (->> (ob-ipython--inspect code pos)
+                          (assoc 'text/plain)
+                          cdr))
+        (ob-ipython--create-inspect-buffer result)
+      (message "No documentation was found."))))
 
 ;; completion
 
@@ -469,10 +465,8 @@ a new kernel will be started."
     (candidates (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
                   (cdr (assoc 'matches res))))
     (sorted t)
-    ;; use new ob-ipython--inspect-code to get documentation for the completion candidate
-    ;; company-mode should show this when the user presses f1 or C-h
     (doc-buffer (ob-ipython--company-doc-buffer
-                 (cdr (assoc 'text/plain (ob-ipython--inspect-code arg (length arg))))))))
+                 (cdr (assoc 'text/plain (ob-ipython--inspect arg (length arg))))))))
 
 ;; mode
 
