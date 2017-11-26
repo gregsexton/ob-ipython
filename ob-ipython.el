@@ -533,7 +533,10 @@ have previously been configured."
 (defvar org-babel-default-header-args:ipython '())
 
 (defun org-babel-edit-prep:ipython (info)
-  ;; TODO: based on kernel, should change the mode
+  ;; TODO: based on kernel, should change the major mode
+  (ob-ipython--create-kernel (->> info (nth 2) (assoc :session) cdr
+                                  ob-ipython--normalize-session)
+                             (->> info (nth 2) (assoc :kernel) cdr))
   (ob-ipython-mode +1))
 
 (defun ob-ipython--normalize-session (session)
