@@ -377,8 +377,7 @@ a new kernel will be started."
         (args (list "--" ob-ipython-client-path
                     "--conn-file"
                     (ob-ipython--get-session-from-edit-buffer (current-buffer))
-                    "--inspect"))
-        )
+                    "--inspect")))
     (with-temp-buffer
       (let ((ret (apply 'call-process-region input nil
                         (ob-ipython--get-python) nil t nil
@@ -422,8 +421,7 @@ a new kernel will be started."
                               (pos . ,(or pos (length code))))))
         (args (list "--" ob-ipython-client-path "--conn-file"
                     (ob-ipython--get-session-from-edit-buffer (current-buffer))
-                    "--complete"))
-        )
+                    "--complete")))
     (with-temp-buffer
       (let ((ret (apply 'call-process-region input nil
                         (ob-ipython--get-python) nil t nil
