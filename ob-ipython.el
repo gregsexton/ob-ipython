@@ -626,7 +626,11 @@ This function is called by `org-babel-execute-src-block'."
         (txt (lambda (value)
                (let ((lines (s-lines value)))
                  (if (cdr lines)
-                     (format "#+BEGIN_EXAMPLE\n%s\n#+END_EXAMPLE" (s-join "\n  " lines))
+                     (->> lines
+                          (-map 's-trim)
+                          (s-join "\n  ")
+                          (s-concat "  ")
+                          (format "#+BEGIN_EXAMPLE\n%s\n#+END_EXAMPLE"))
                    (s-concat ": " (car lines)))))))
     (or (-when-let (val (cdr (assoc 'text/org values))) (funcall org val))
         (-when-let (val (cdr (assoc 'image/png values))) (funcall png val))
