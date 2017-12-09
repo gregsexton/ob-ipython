@@ -577,7 +577,7 @@ This function is called by `org-babel-execute-src-block'."
        (let ((replacement (ob-ipython--process-response ret file result-type)))
          (ipython--async-replace-sentinel sentinel buffer replacement)))
      (list sentinel (current-buffer) file result-type))
-    sentinel))
+    (format "%s - %s" (length ob-ipython--async-queue) sentinel)))
 
 (defun ob-ipython--execute-sync (body params)
   (let* ((file (cdr (assoc :ipyfile params)))
