@@ -302,6 +302,18 @@ Essentially the instructions boil down to
    quick fix. Otherwise feel free to cut an issue - I'll do my best to
    help.
 
+*** When I start Emacs or initialize =ob-ipython=, I get =json-readtable-error=
+   
+   If you get this error, there's most likely a problem with Emacs talking to =jupyter= or
+   =ipython=. Try running ~M-! jupyter --version~ and see what you get. If you get a message indicating
+   that it didn't recognize =jupyter=, then try making sure you've configured your PATH correctly with
+   something like [[https://github.com/purcell/exec-path-from-shell][exec-path-from-shell]].
+
+   If this doesn't work, get exactly what is going wrong by invoking ~M-x debug-on-entry RET
+   json-read~ followed by triggering the bug. This should help narrow down what exactly is going
+   wrong. Check your virtualenv and make sure that the ~M-! jupyter --version~ command from earlier
+   isn't returning garbled text.
+
 ** Alternatives
 *** Why not use IPython notebook?
 
