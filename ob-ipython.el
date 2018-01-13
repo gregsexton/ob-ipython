@@ -469,13 +469,15 @@ a new kernel will be started."
   (interactive (list 'interactive))
   (cl-case command
     (interactive (company-begin-backend 'company-ob-ipython))
-    (prefix (and
-             ob-ipython-mode
-             (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
-               (substring (buffer-string) (cdr (assoc 'cursor_start res))
-                          (cdr (assoc 'cursor_end res))))))
-    (candidates (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
-                  (cdr (assoc 'matches res))))
+    (prefix (and ob-ipython-mode
+                 (let ((res (ob-ipython-completions (current-buffer) (1- (point)))))
+                   (substring-no-properties (buffer-string)
+                                            (cdr (assoc 'cursor_start res))
+                                            (cdr (assoc 'cursor_end res))))))
+    (candidates (cons :async (lambda (cb)
+                               (let ((res (ob-ipython-completions
+                                           (current-buffer) (1- (point)))))
+                                 (funcall cb (cdr (assoc 'matches res)))))))
     (sorted t)
     (doc-buffer (ob-ipython--company-doc-buffer
                  (cdr (assoc 'text/plain (ob-ipython--inspect arg (length arg))))))))
