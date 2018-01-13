@@ -175,7 +175,7 @@ can be displayed.")
              (not (s-ends-with-p ".json" name)))
     (ob-ipython--create-process
      (format "kernel-%s" name)
-     (append 
+     (append
       (list ob-ipython-command "console" "--simple-prompt")
       (list "-f" (ob-ipython--kernel-file name))
       (if kernel (list "--kernel" kernel) '())
@@ -361,10 +361,20 @@ a new kernel will be started."
        (assoc 'status)
        cdr))
 
+(defun ob-ipython--extract-execution-count (msgs)
+  (->> msgs
+       (-filter (lambda (msg) (-contains? '("execute_reply")
+                                          (cdr (assoc 'msg_type msg)))))
+       car
+       (assoc 'content)
+       (assoc 'execution_count)
+       cdr))
+
 (defun ob-ipython--eval (service-response)
   (let ((status (ob-ipython--extract-status service-response)))
     (cond ((string= "ok" status) `((:result . ,(ob-ipython--extract-result service-response))
-                                   (:output . ,(ob-ipython--extract-output service-response))))
+                                   (:output . ,(ob-ipython--extract-output service-response))
+                                   (:exec-count . ,(ob-ipython--extract-execution-count service-response))))
           ((string= "abort" status) (error "Kernel execution aborted."))
           ((string= "error" status) (error (ob-ipython--extract-error service-response))))))
 
@@ -598,10 +608,12 @@ This function is called by `org-babel-execute-src-block'."
     (if (eq result-type 'output)
         output
       (ob-ipython--output output nil)
-      (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
-                              (list (cdr (assoc :value result))
-                                    (cdr (assoc :display result))))
-                        (remove-if-not nil))))))
+      (s-concat
+       (format "# Out[%d]:\n" (cdr (assoc :exec-count ret)))
+       (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
+                               (list (cdr (assoc :value result))
+                                     (cdr (assoc :display result))))
+                         (remove-if-not nil)))))))
 
 (defun ob-ipython--render (file-or-nil values)
   (let ((org (lambda (value) value))
