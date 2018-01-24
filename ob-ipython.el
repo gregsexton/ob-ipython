@@ -522,10 +522,9 @@ is empty, return python2 by default."
                           (cdr))
                    (error "Can't find kernel file; make sure jupyter paths are correct and kernel file is there"))))
 
-    (if kernel
-        (if (not (length kernel))
-            "python2"
-          kernel))))
+    (if (string= "" kernel)
+        "python2"
+      kernel)))
 
 (defun ob-ipython--get-kernels ()
   "Return a list of available jupyter kernels and their corresponding languages.
@@ -602,10 +601,14 @@ have previously been configured."
 
 (defun ob-ipython--get-session-from-edit-buffer (buffer)
   (with-current-buffer buffer
-    (let ((params (nth 2 org-src--babel-info)))
-      (format "%s-%s"
-              (ob-ipython--get-language (cdr (assoc :kernel params)))
-              (ob-ipython--normalize-session (cdr (assoc :session params)))))))
+    (let* ((params (nth 2 org-src--babel-info))
+           (kernel (cdr (assoc :kernel params)))
+           (session (cdr (assoc :session params))))
+      (if (s-ends-with? ".json" session)
+          session
+        (format "emacs-%s-%s.json"
+                (ob-ipython--get-language kernel)
+                (ob-ipython--normalize-session session))))))
 
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
