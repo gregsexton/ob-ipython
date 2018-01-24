@@ -64,6 +64,13 @@
   "Directory where resources (e.g images) are stored so that they
 can be displayed.")
 
+(defcustom ob-ipython-kernel-paths
+  `("./" ,(replace-regexp-in-string "\n$" ""
+                                    (shell-command-to-string
+                                     (s-concat ob-ipython-command " --runtime-dir"))))
+  "Directories where to look for ipython/jupyter kernels.")
+
+
 ;; utils
 
 (defun ob-ipython--write-string-to-file (file string)
@@ -197,7 +204,10 @@ can be displayed.")
           procs)))
 
 (defun ob-ipython--create-repl (name kernel)
-  (let* ((language (ob-ipython--get-language kernel))
+  (let* ((kernel (if (s-ends-with-p ".json" name)
+                     (ob-ipython--get-kernel-from-file name)
+                   kernel))
+         (language (ob-ipython--get-language kernel))
          (process-name (format "Jupyter:%s:%s" (capitalize language) name))
          (cmd (s-join " " (ob-ipython--kernel-repl-cmd name kernel))))
     (get-buffer-process
@@ -497,6 +507,26 @@ a new kernel will be started."
 
 (defvar ob-ipython-configured-kernels nil)
 
+(defun ob-ipython--get-kernel-from-file (name)
+  "Return kernel from provided filename.  If kernel
+is empty, return python2 by default."
+  ;; TODO Should we be more clever about the default python kernel returned?
+  (let* ((filename (->> (-map (lambda (dir) (directory-files dir t name))
+                              ob-ipython-kernel-paths)
+                        (-flatten)
+                        (car)))
+         (kernel (if filename
+                     (->> filename
+                          (json-read-file)
+                          (assoc 'kernel_name)
+                          (cdr))
+                   (error "Can't find kernel file; make sure jupyter paths are correct and kernel file is there"))))
+
+    (if kernel
+        (if (not (length kernel))
+            "python2"
+          kernel))))
+
 (defun ob-ipython--get-kernels ()
   "Return a list of available jupyter kernels and their corresponding languages.
 The elements of the list have the form (\"kernel\" \"language\")."
@@ -596,9 +626,11 @@ This function is called by `org-babel-execute-src-block'."
     (ob-ipython--execute-request-async
      (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                     params (org-babel-variable-assignments:python params))
-     (format "%s-%s"
-             (ob-ipython--get-language kernel)
-             (ob-ipython--normalize-session session))
+     (if (s-ends-with? ".json" session)
+         session
+       (format "emacs-%s-%s.json"
+               (ob-ipython--get-language kernel)
+               (ob-ipython--normalize-session session)))
      (lambda (ret sentinel buffer file result-type)
        (let ((replacement (ob-ipython--process-response ret file result-type)))
          (ipython--async-replace-sentinel sentinel buffer replacement)))
@@ -616,9 +648,11 @@ This function is called by `org-babel-execute-src-block'."
                      (ob-ipython--execute-request
                       (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                                      params (org-babel-variable-assignments:python params))
-                      (format "%s-%s"
-                              (ob-ipython--get-language kernel)
-                              (ob-ipython--normalize-session session)))))
+                      (if (s-ends-with? ".json" session)
+                          session
+                        (format "emacs-%s-%s.json"
+                                (ob-ipython--get-language kernel)
+                                (ob-ipython--normalize-session session))))))
       (ob-ipython--process-response ret file result-type))))
 
 (defun ob-ipython--process-response (ret file result-type)
