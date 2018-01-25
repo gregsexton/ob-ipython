@@ -158,7 +158,7 @@ can be displayed.")
 (defun ob-ipython--kernel-file (name kernel)
   (if (s-ends-with-p ".json" name)
       name
-    (format "emacs-%s-%s.json" (ob-ipython--get-language kernel) name)))
+    (format "emacs-%s-%s.json" (ob-ipython--get-display-name kernel) name)))
 
 (defun ob-ipython--kernel-repl-cmd (name kernel)
   (list ob-ipython-command "console" "--simple-prompt" "--existing"
@@ -178,12 +178,12 @@ can be displayed.")
                exec-path))
 
 (defun ob-ipython--create-kernel (name kernel)
-  (let ((language (ob-ipython--get-language kernel)))
+  (let ((language-display (ob-ipython--get-display-name kernel)))
     (when (and (not (ignore-errors (process-live-p (get-process (format "kernel-%s-%s"
-                                                                        language name)))))
+                                                                        language-display name)))))
                (not (s-ends-with-p ".json" name)))
       (ob-ipython--create-process
-       (format "kernel-%s-%s" language name)
+       (format "kernel-%s-%s" language-display name)
        (append
         (list ob-ipython-command "console" "--simple-prompt")
         (list "-f" (ob-ipython--kernel-file name kernel))
@@ -207,8 +207,8 @@ can be displayed.")
   (let* ((kernel (if (s-ends-with-p ".json" name)
                      (ob-ipython--get-kernel-from-file name)
                    kernel))
-         (language (ob-ipython--get-language kernel))
-         (process-name (format "Jupyter:%s:%s" (capitalize language) name))
+         (language-display (ob-ipython--get-display-name kernel))
+         (process-name (format "Jupyter:%s:%s" language-display name))
          (cmd (s-join " " (ob-ipython--kernel-repl-cmd name kernel))))
     (get-buffer-process
      (python-shell-make-comint cmd process-name nil))
@@ -509,7 +509,7 @@ a new kernel will be started."
 
 (defun ob-ipython--get-kernel-from-file (name)
   "Return kernel from provided filename.  If kernel
-is empty, return python2 by default."
+is empty, return python by default."
   ;; TODO Should we be more clever about the default python kernel returned?
   (let* ((filename (->> (-map (lambda (dir) (directory-files dir t name))
                               ob-ipython-kernel-paths)
@@ -523,34 +523,52 @@ is empty, return python2 by default."
                    (error "Can't find kernel file; make sure jupyter paths are correct and kernel file is there"))))
 
     (if (string= "" kernel)
-        "python2"
+        "python"
       kernel)))
 
 (defun ob-ipython--get-kernels ()
-  "Return a list of available jupyter kernels and their corresponding languages.
-The elements of the list have the form (\"kernel\" \"language\")."
+  "Return a list of available jupyter kernels and their corresponding languages
+and display names. The elements of the list have the form (\"kernel\" \"language\" \"display_name\")."
   (and ob-ipython-command
        (let ((kernelspecs (cdar (json-read-from-string
                                  (shell-command-to-string
                                   (s-concat ob-ipython-command " kernelspec list --json"))))))
-         (-map (lambda (spec)
-                 (cons (symbol-name (car spec))
-                       (->> (cdr spec)
-                            (assoc 'spec)
-                            cdr
-                            (assoc 'language)
-                            cdr)))
-               kernelspecs))))
+         (->> kernelspecs
+              (-map (lambda (kernelspec)
+                      (list (symbol-name (car kernelspec))
+                            (->> (cdr kernelspec)
+                                 (assoc 'spec)
+                                 cdr
+                                 (assoc 'language)
+                                 cdr)
+                            (->> (cdr kernelspec)
+                                 (assoc 'spec)
+                                 cdr
+                                 (assoc 'display_name)
+                                 cdr
+                                 (replace-regexp-in-string "[[:space:]]" "")
+                                 ))))
+              ;; We'll later make python without a version number the default.
+              (-insert-at 0 '("python" "python" "Python"))
+              ;; When invoking via jupyter-X, we want X (i.e., language) case insensitive.
+              ;; Here, we insert copies of the above found kernels with lower case names.
+              (-map (lambda (x) (list x (-snoc (-butlast x) (downcase (-last-item x))))))
+              (-flatten-n 1)
+              )
+         )))
 
-(defun ob-ipython--get-language (kernel)
-  "Return language given KERNEL."
-  (cdr (assoc kernel ob-ipython-configured-kernels)))
+(defun ob-ipython--get-display-name (kernel)
+  "Return display-name for KERNEL."
+  ;; get display-name for kernel and capitalize first letter
+  (or (capitalize (nth 2 (assoc kernel ob-ipython-configured-kernels)))
+      (capitalize kernel)))
 
 (defun ob-ipython--configure-kernel (kernel-lang)
   "Configure org mode to use specified kernel."
   (let* ((kernel (car kernel-lang))
-         (language (cdr kernel-lang))
-         (jupyter-lang (concat "jupyter-" language))
+         (language (nth 1 kernel-lang))
+         (display-name (nth 2 kernel-lang))
+         (jupyter-lang (concat "jupyter-" display-name))
          (mode (intern (or (cdr (assoc language org-src-lang-modes))
                            (replace-regexp-in-string "[0-9]*" "" language))))
          (header-args (intern (concat "org-babel-default-header-args:" jupyter-lang))))
@@ -576,14 +594,8 @@ have previously been configured."
   (when (or replace (not ob-ipython-configured-kernels))
     (setq ob-ipython-configured-kernels
           (-map 'ob-ipython--configure-kernel (ob-ipython--get-kernels))))
-  ;; Find kernel for python so we can set default :kernel param.
-  ;; We take the first python kernel found (always? python2 or python3).
-  (setq org-babel-default-header-args:ipython
-        `((:kernel . ,(->> ob-ipython-configured-kernels
-                           (-filter (lambda (kernel-lang)
-                                      (string-match "python" (cdr kernel-lang))))
-                           (car)
-                           (car))))))
+  ;; Set default kernel to python
+  (setq org-babel-default-header-args:ipython '((:kernel . "python"))))
 
 (defvar org-babel-default-header-args:ipython '())
 
@@ -607,7 +619,7 @@ have previously been configured."
       (if (s-ends-with? ".json" session)
           session
         (format "emacs-%s-%s.json"
-                (ob-ipython--get-language kernel)
+                (ob-ipython--get-display-name kernel)
                 (ob-ipython--normalize-session session))))))
 
 (defun org-babel-execute:ipython (body params)
@@ -632,7 +644,7 @@ This function is called by `org-babel-execute-src-block'."
      (if (s-ends-with? ".json" session)
          session
        (format "emacs-%s-%s.json"
-               (ob-ipython--get-language kernel)
+               (ob-ipython--get-display-name kernel)
                (ob-ipython--normalize-session session)))
      (lambda (ret sentinel buffer file result-type)
        (let ((replacement (ob-ipython--process-response ret file result-type)))
@@ -654,7 +666,7 @@ This function is called by `org-babel-execute-src-block'."
                       (if (s-ends-with? ".json" session)
                           session
                         (format "emacs-%s-%s.json"
-                                (ob-ipython--get-language kernel)
+                                (ob-ipython--get-display-name kernel)
                                 (ob-ipython--normalize-session session))))))
       (ob-ipython--process-response ret file result-type))))
 
