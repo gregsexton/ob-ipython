@@ -563,11 +563,11 @@ and display names. The elements of the list have the form (\"kernel\" \"language
   (or (capitalize (nth 2 (assoc kernel ob-ipython-configured-kernels)))
       (capitalize kernel)))
 
-(defun ob-ipython--configure-kernel (kernel-lang)
+(defun ob-ipython--configure-kernel (kernel-lang-display)
   "Configure org mode to use specified kernel."
-  (let* ((kernel (car kernel-lang))
-         (language (nth 1 kernel-lang))
-         (display-name (nth 2 kernel-lang))
+  (let* ((kernel (car kernel-lang-display))
+         (language (nth 1 kernel-lang-display))
+         (display-name (nth 2 kernel-lang-display))
          (jupyter-lang (concat "jupyter-" display-name))
          (mode (intern (or (cdr (assoc language org-src-lang-modes))
                            (replace-regexp-in-string "[0-9]*" "" language))))
