@@ -618,7 +618,7 @@ have previously been configured."
            (session (cdr (assoc :session params))))
       (if (s-ends-with? ".json" session)
           session
-        (format "emacs-%s-%s.json"
+        (format "%s-%s"
                 (ob-ipython--get-display-name kernel)
                 (ob-ipython--normalize-session session))))))
 
@@ -643,7 +643,7 @@ This function is called by `org-babel-execute-src-block'."
                                     params (org-babel-variable-assignments:python params))
      (if (s-ends-with? ".json" session)
          session
-       (format "emacs-%s-%s.json"
+       (format "%s-%s"
                (ob-ipython--get-display-name kernel)
                (ob-ipython--normalize-session session)))
      (lambda (ret sentinel buffer file result-type)
@@ -665,7 +665,7 @@ This function is called by `org-babel-execute-src-block'."
                                                      params (org-babel-variable-assignments:python params))
                       (if (s-ends-with? ".json" session)
                           session
-                        (format "emacs-%s-%s.json"
+                        (format "%s-%s"
                                 (ob-ipython--get-display-name kernel)
                                 (ob-ipython--normalize-session session))))))
       (ob-ipython--process-response ret file result-type))))
