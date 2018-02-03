@@ -501,17 +501,24 @@ a new kernel will be started."
   "Return a list of available jupyter kernels and their corresponding languages.
 The elements of the list have the form (\"kernel\" \"language\")."
   (and ob-ipython-command
-       (let ((kernelspecs (cdar (json-read-from-string
-                                 (shell-command-to-string
-                                  (s-concat ob-ipython-command " kernelspec list --json"))))))
-         (-map (lambda (spec)
-                 (cons (symbol-name (car spec))
-                       (->> (cdr spec)
-                            (assoc 'spec)
-                            cdr
-                            (assoc 'language)
-                            cdr)))
-               kernelspecs))))
+       (let*
+           ((kernelspecs-cmd (s-concat ob-ipython-command " kernelspec list --json"))
+            (kernelspecs-text (shell-command-to-string kernelspecs-cmd))
+            (kernelspecs
+             (condition-case-unless-debug nil
+                 (cdar (json-read-from-string kernelspecs-text))
+               (json-readtable-error
+                (message "Failed to list jupyter kernels with: %s" kernelspecs-cmd)
+                nil))))
+         (when kernelspecs
+           (-map (lambda (spec)
+                   (cons (symbol-name (car spec))
+                         (->> (cdr spec)
+                              (assoc 'spec)
+                              cdr
+                              (assoc 'language)
+                              cdr)))
+                 kernelspecs)))))
 
 (defun ob-ipython--configure-kernel (kernel-lang)
   "Configure org mode to use specified kernel."
