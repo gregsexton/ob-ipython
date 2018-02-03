@@ -508,7 +508,7 @@ The elements of the list have the form (\"kernel\" \"language\")."
              (condition-case-unless-debug nil
                  (cdar (json-read-from-string kernelspecs-text))
                (json-readtable-error
-                (message "Failed to list jupyter kernels with: %s" kernelspecs-cmd)
+                (message "Failed to list jupyter kernels with: %s, got:\n%s" kernelspecs-cmd kernelspecs-text)
                 nil))))
          (when kernelspecs
            (-map (lambda (spec)
