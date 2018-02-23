@@ -213,14 +213,29 @@ can be displayed.")
         cdr
         list)))
 
-;;; TODO: broken
+;;; TODO: make this work on windows
+;;; NOTE: interrupting remote kernel not currently possible, cf https://github.com/jupyter/jupyter_console/issues/150
 (defun ob-ipython-interrupt-kernel (proc)
   "Interrupt a running kernel. Useful for terminating infinite
 loops etc. If things get really desparate try `ob-ipython-kill-kernel'."
   (interactive (ob-ipython--choose-kernel))
   (when proc
-    (interrupt-process proc)
-    (message (format "Interrupted %s" (process-name proc)))))
+    ;; send SIGINT to "python -m ipykernel_launcher", a child of proc
+    (let ((proc-name (process-name proc)))
+      (accept-process-output
+       ;; get the child pid with pgrep -P
+       ;; NOTE assumes proc has only 1 child (seems to be true always)
+       (make-process
+        :name (concat proc-name "-child")
+        :command (list "pgrep" "-P" (number-to-string
+                                     (process-id proc)))
+        ;; send SIGINT to child-proc
+        :filter
+        (lambda (proc child-proc-id)
+          (make-process
+           :name (concat "interrupt-" proc-name)
+           :command (list "kill" "-2"
+                          (string-trim child-proc-id)))))))))
 
 (defun ob-ipython-kill-kernel (proc)
   "Kill a kernel process. If you then re-evaluate a source block
