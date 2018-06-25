@@ -69,7 +69,8 @@ can be displayed.")
 (defun ob-ipython--write-string-to-file (file string)
   (if string
       (with-temp-buffer
-        (let ((require-final-newline nil))
+        (let ((require-final-newline nil)
+              (before-save-hook nil))
           (insert string)
           (write-file file)))
     (error "No output was produced to write to a file.")))
@@ -78,7 +79,8 @@ can be displayed.")
   (if b64-string
       (with-temp-buffer
         (let ((buffer-file-coding-system 'binary)
-              (require-final-newline nil))
+              (require-final-newline nil)
+              (before-save-hook nil))
           (insert b64-string)
           (base64-decode-region (point-min) (point-max))
           (write-file file)))
