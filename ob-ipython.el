@@ -64,6 +64,10 @@
   "Directory where resources (e.g images) are stored so that they
 can be displayed.")
 
+(defcustom ob-ipython-suppress-execution-count nil
+  "If non-nil do not show the execution count in output."
+  :group 'ob-ipython)
+
 ;; utils
 
 (defun ob-ipython--write-string-to-file (file string)
@@ -626,11 +630,13 @@ This function is called by `org-babel-execute-src-block'."
         output
       (ob-ipython--output output nil)
       (s-concat
-       (format "# Out[%d]:\n" (cdr (assoc :exec-count ret)))
-       (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
-                               (list (cdr (assoc :value result))
-                                     (cdr (assoc :display result))))
-                         (remove-if-not nil)))))))
+       (if ob-ipython-suppress-execution-count
+	   ""
+	 (format "# Out[%d]:\n" (cdr (assoc :exec-count ret)))
+	 (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
+				 (list (cdr (assoc :value result))
+				       (cdr (assoc :display result))))
+			   (remove-if-not nil)))))))
 
 (defun ob-ipython--render (file-or-nil values)
   (let ((org (lambda (value) value))
