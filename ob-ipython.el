@@ -322,10 +322,12 @@ a new kernel will be started."
   (ob-ipython--maybe-run-async))
 
 (defun ob-ipython--execute-request (code name)
-  (with-temp-buffer
-    (let ((ret (apply 'call-process-region code nil
-                      (ob-ipython--get-python) nil t nil
-                      (list "--" ob-ipython-client-path "--conn-file" name "--execute"))))
+  (let* ((client-output-file (make-temp-file "ob-ipython-client-buffer"))
+         (ret (apply 'call-process-region code nil
+                     (ob-ipython--get-python) nil `(:file ,client-output-file) nil
+                     (list "--" ob-ipython-client-path "--conn-file" name "--execute"))))
+    (with-temp-buffer
+      (insert-file-contents client-output-file)
       (if (> ret 0)
           (ob-ipython--dump-error (buffer-string))
         (goto-char (point-min))
