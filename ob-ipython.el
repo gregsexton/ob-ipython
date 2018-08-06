@@ -313,7 +313,7 @@ a new kernel will be started."
 
 (defun ob-ipython--maybe-run-async ()
   (when (not (ob-ipython--running-p))
-    (when-let (val (ob-ipython--dequeue 'ob-ipython--async-queue))
+    (-when-let (val (ob-ipython--dequeue 'ob-ipython--async-queue))
       (cl-destructuring-bind (code name callback args) val
         (ob-ipython--run-async code name callback args)))))
 
