@@ -62,10 +62,12 @@
 
 (defcustom ob-ipython-resources-dir "./obipy-resources/"
   "Directory where resources (e.g images) are stored so that they
-can be displayed.")
+can be displayed."
+  :group 'ob-ipython)
 
 (defcustom ob-ipython-output-exec-count t
-  "When non-nil decorate results with execution count metadata.")
+  "When non-nil decorate results with execution count metadata."
+  :group 'ob-ipython)
 
 ;; utils
 
