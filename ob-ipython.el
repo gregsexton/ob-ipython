@@ -62,7 +62,12 @@
 
 (defcustom ob-ipython-resources-dir "./obipy-resources/"
   "Directory where resources (e.g images) are stored so that they
-can be displayed.")
+can be displayed."
+  :group 'ob-ipython)
+
+(defcustom ob-ipython-output-exec-count t
+  "When non-nil decorate results with execution count metadata."
+  :group 'ob-ipython)
 
 ;; utils
 
@@ -626,7 +631,8 @@ This function is called by `org-babel-execute-src-block'."
         output
       (ob-ipython--output output nil)
       (s-concat
-       (format "# Out[%d]:\n" (cdr (assoc :exec-count ret)))
+       (if ob-ipython-output-exec-count
+           (format "# Out[%d]:\n" (cdr (assoc :exec-count ret))))
        (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
                                (list (cdr (assoc :value result))
                                      (cdr (assoc :display result))))
