@@ -560,8 +560,7 @@ and display names. The elements of the list have the form (\"kernel\" \"language
 (defun ob-ipython--get-display-name (kernel)
   "Return display-name for KERNEL."
   ;; get display-name for kernel and capitalize first letter
-  (or (capitalize (nth 2 (assoc kernel ob-ipython-configured-kernels)))
-      (capitalize kernel)))
+  (capitalize (nth 2 (assoc kernel ob-ipython-configured-kernels))))
 
 (defun ob-ipython--configure-kernel (kernel-lang-display)
   "Configure org mode to use specified kernel."
@@ -583,7 +582,7 @@ and display names. The elements of the list have the form (\"kernel\" \"language
       'org-babel-execute:ipython)
     (defalias (intern (concat "org-babel-" jupyter-lang "-initiate-session"))
       'org-babel-ipython-initiate-session)
-    kernel-lang))
+    kernel-lang-display))
 
 (defun ob-ipython-auto-configure-kernels (&optional replace)
   "Auto-configure kernels for use with org-babel based on the
