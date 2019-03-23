@@ -634,11 +634,11 @@ This function is called by `org-babel-execute-src-block'."
       (s-concat
        (if ob-ipython-suppress-execution-count
            ""
-         (format "# Out[%d]:\n" (cdr (assoc :exec-count ret)))
-         (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
-                                 (list (cdr (assoc :value result))
-                                       (cdr (assoc :display result))))
-                           (remove-if-not nil))))))))
+         (format "# Out[%d]:\n" (cdr (assoc :exec-count ret))))
+       (s-join "\n" (->> (-map (-partial 'ob-ipython--render file)
+                               (list (cdr (assoc :value result))
+                                     (cdr (assoc :display result))))
+                         (remove-if-not nil)))))))
 
 (defun ob-ipython--render (file-or-nil values)
   (let ((org (lambda (value) value))
