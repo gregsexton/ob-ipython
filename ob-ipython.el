@@ -169,12 +169,10 @@ can be displayed.")
     (apply 'start-process name buf (car cmd) (cdr cmd))))
 
 (defun ob-ipython--get-python ()
-  (let* ((python-candidate (if (eq system-type 'windows-nt)
-                               "python.exe"
-                             "python")))
-    (locate-file (or python-shell-interpreter
-                     python-candidate)
-                 exec-path)))
+  (locate-file (if (eq system-type 'windows-nt)
+                   "python.exe"
+                 (or python-shell-interpreter "python"))
+               exec-path))
 
 (defun ob-ipython--create-kernel (name &optional kernel)
   (when (and (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
