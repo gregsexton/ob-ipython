@@ -717,15 +717,19 @@ Make sure your src block has a :session param.")
   (save-window-excursion
     (save-excursion
       (save-restriction
-        (with-current-buffer buffer
-          (goto-char (point-min))
-          (re-search-forward sentinel)
-          (re-search-backward "\\(call\\|src\\)_\\|^[ \t]*#\\+\\(BEGIN_SRC\\|CALL:\\)")
-          (org-babel-remove-result)
-          (org-babel-insert-result
-           replacement
-           (cdr (assoc :result-params (nth 2 (org-babel-get-src-block-info)))))
-          (org-redisplay-inline-images))))))
+        (condition-case nil
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (re-search-forward sentinel)
+            (re-search-backward "\\(call\\|src\\)_\\|^[ \t]*#\\+\\(BEGIN_SRC\\|CALL:\\)")
+            (org-babel-remove-result)
+            (org-babel-insert-result
+            replacement
+            (cdr (assoc :result-params (nth 2 (org-babel-get-src-block-info)))))
+            (org-redisplay-inline-images))
+          (error (message "An error prevented replacing the sentinel after ob-ipython async execution. Most likely the sentinel was modified.")))
+          ))))
+
 
 ;; lib
 
