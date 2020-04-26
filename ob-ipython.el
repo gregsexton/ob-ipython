@@ -165,10 +165,9 @@ can be displayed.")
     (apply 'start-process name buf (car cmd) (cdr cmd))))
 
 (defun ob-ipython--get-python ()
-  (locate-file (if (eq system-type 'windows-nt)
-                   "python.exe"
-                 (or python-shell-interpreter "python"))
-               exec-path))
+  (let ((buf ( or python-shell-interpreter "python")))
+    ;; (message buf)
+  (locate-file buf exec-path)))
 
 (defun ob-ipython--create-kernel (name &optional kernel)
   (when (and (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
@@ -272,7 +271,7 @@ a new kernel will be started."
 (defun ob-ipython--run-async (code name callback args)
   (let ((proc (ob-ipython--create-process
                "execute"
-               (list (ob-ipython--get-python)
+               (list (ob-ipython--get-pythonb)
                      "--" ob-ipython-client-path "--conn-file" name "--execute"))))
     ;; TODO: maybe add a way of disabling streaming output?
     ;; TODO: cleanup and break out - we parse twice, can we parse once?
