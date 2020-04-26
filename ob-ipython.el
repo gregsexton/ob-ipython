@@ -271,7 +271,7 @@ a new kernel will be started."
 (defun ob-ipython--run-async (code name callback args)
   (let ((proc (ob-ipython--create-process
                "execute"
-               (list (ob-ipython--get-pythonb)
+               (list (ob-ipython--get-python)
                      "--" ob-ipython-client-path "--conn-file" name "--execute"))))
     ;; TODO: maybe add a way of disabling streaming output?
     ;; TODO: cleanup and break out - we parse twice, can we parse once?
