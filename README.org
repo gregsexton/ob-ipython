@@ -26,7 +26,6 @@
     elisp dependencies first:
 
     * https://github.com/magnars/dash.el
-        * Including dash-functional
     * https://github.com/magnars/s.el
     * https://github.com/rejeep/f.el
 
