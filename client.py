@@ -45,8 +45,7 @@ def create_client(name):
     c.load_connection_file()
     c.start_channels()
     io, shell = c.get_iopub_msg, c.get_shell_msg
-    t = threading.Thread(target=msg_router, args=(io, shell))
-    t.setDaemon(True)
+    t = threading.Thread(target=msg_router, args=(io, shell), daemon=True)
     t.start()
     return c
 
