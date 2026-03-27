@@ -533,8 +533,8 @@ The elements of the list have the form (\"kernel\" \"language\")."
   (let* ((kernel (car kernel-lang))
          (language (cdr kernel-lang))
          (jupyter-lang (concat "jupyter-" language))
-         (mode (intern (or (cdr (assoc language org-src-lang-modes))
-                           (replace-regexp-in-string "[0-9]*" "" language))))
+         (mode  (or (cdr (assoc language org-src-lang-modes))
+                    (intern (replace-regexp-in-string "[0-9]*" "" language))))
          (header-args (intern (concat "org-babel-default-header-args:" jupyter-lang))))
     (add-to-list 'org-src-lang-modes `(,jupyter-lang . ,mode))
     ;; Only set defaults if the corresponding variable is nil or does not
@@ -548,6 +548,7 @@ The elements of the list have the form (\"kernel\" \"language\")."
     (defalias (intern (concat "org-babel-" jupyter-lang "-initiate-session"))
       'org-babel-ipython-initiate-session)
     kernel-lang))
+
 
 (defun ob-ipython-auto-configure-kernels (&optional replace)
   "Auto-configure kernels for use with org-babel based on the
