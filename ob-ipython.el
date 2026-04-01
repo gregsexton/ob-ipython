@@ -566,6 +566,10 @@ have previously been configured."
   (ob-ipython--create-kernel (->> info (nth 2) (assoc :session) cdr
                                   ob-ipython--normalize-session)
                              (->> info (nth 2) (assoc :kernel) cdr))
+  ;; Support for python.el's "send-code" commands within edit buffers.
+  (setq-local python-shell-buffer-name
+              (format "Python:%s" (->> info (nth 2) (assoc :session) cdr
+                                       ob-ipython--normalize-session)))
   (ob-ipython-mode +1))
 
 (defun ob-ipython--normalize-session (session)
