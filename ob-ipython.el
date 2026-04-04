@@ -64,6 +64,13 @@
   "Directory where resources (e.g images) are stored so that they
 can be displayed.")
 
+(defcustom ob-ipython-kernel-paths
+  `("./" ,(replace-regexp-in-string "\n$" ""
+                                    (shell-command-to-string
+                                     (s-concat ob-ipython-command " --runtime-dir"))))
+  "Directories where to look for ipython/jupyter kernels.")
+
+
 ;; utils
 
 (defun ob-ipython--write-string-to-file (file string)
@@ -148,21 +155,21 @@ can be displayed.")
 
 ;; process management
 
-(defun ob-ipython--kernel-file (name)
+(defun ob-ipython--kernel-file (name kernel)
   (if (s-ends-with-p ".json" name)
       name
-    (format "emacs-%s.json" name)))
+    (format "emacs-%s-%s.json" (ob-ipython--get-display-name kernel) name)))
 
-(defun ob-ipython--kernel-repl-cmd (name)
+(defun ob-ipython--kernel-repl-cmd (name kernel)
   (list ob-ipython-command "console" "--simple-prompt" "--existing"
-        (ob-ipython--kernel-file name)))
+        (ob-ipython--kernel-file name kernel)))
 
 ;;; TODO: could setup a default sentinel that outputs error on process
 ;;; early termination
-(defun ob-ipython--create-process (name cmd)
-  (let ((buf (get-buffer-create (format "*ob-ipython-%s*" name))))
+(defun ob-ipython--create-process (kernel-name cmd)
+  (let ((buf (get-buffer-create (format "*ob-ipython-%s*" kernel-name))))
     (with-current-buffer buf (erase-buffer))
-    (apply 'start-process name buf (car cmd) (cdr cmd))))
+    (apply 'start-process kernel-name buf (car cmd) (cdr cmd))))
 
 (defun ob-ipython--get-python ()
   (locate-file (if (eq system-type 'windows-nt)
@@ -170,18 +177,22 @@ can be displayed.")
                  (or python-shell-interpreter "python"))
                exec-path))
 
-(defun ob-ipython--create-kernel (name &optional kernel)
-  (when (and (not (ignore-errors (process-live-p (get-process (format "kernel-%s" name)))))
-             (not (s-ends-with-p ".json" name)))
-    (ob-ipython--create-process
-     (format "kernel-%s" name)
-     (append
-      (list ob-ipython-command "console" "--simple-prompt")
-      (list "-f" (ob-ipython--kernel-file name))
-      (if kernel (list "--kernel" kernel) '())
-      ;;should be last in the list of args
-      ob-ipython-kernel-extra-args))
-    (sleep-for 1)))
+(defun ob-ipython--create-kernel (name kernel)
+  (let ((language-display (ob-ipython--get-display-name kernel)))
+    (when (and (not (ignore-errors (process-live-p (get-process (format "kernel-%s-%s"
+                                                                        language-display name)))))
+               (not (s-ends-with-p ".json" name)))
+      (ob-ipython--create-process
+       (format "kernel-%s-%s" language-display name)
+       (append
+        (list ob-ipython-command "console" "--simple-prompt")
+        (list "-f" (ob-ipython--kernel-file name kernel))
+        (if kernel (list "--kernel" kernel) '())
+        ;;should be last in the list of args
+        ob-ipython-kernel-extra-args))
+      (sleep-for 1))
+    )
+  )
 
 (defun ob-ipython--get-kernel-processes ()
   (let ((procs (-filter (lambda (p)
@@ -192,17 +203,16 @@ can be displayed.")
                 procs)
           procs)))
 
-(defun ob-ipython--create-repl (name)
-  (let ((python-shell-completion-native-enable nil)
-        (cmd (s-join " " (ob-ipython--kernel-repl-cmd name))))
-    (if (string= "default" name)
-        (progn
-          (run-python cmd nil nil)
-          (format "*%s*" python-shell-buffer-name))
-      (let ((process-name (format "Python:%s" name)))
-        (get-buffer-process
-         (python-shell-make-comint cmd process-name nil))
-        (format "*%s*" process-name)))))
+(defun ob-ipython--create-repl (name kernel)
+  (let* ((kernel (if (s-ends-with-p ".json" name)
+                     (ob-ipython--get-kernel-from-file name)
+                   kernel))
+         (language-display (ob-ipython--get-display-name kernel))
+         (process-name (format "Jupyter:%s:%s" language-display name))
+         (cmd (s-join " " (ob-ipython--kernel-repl-cmd name kernel))))
+    (get-buffer-process
+     (python-shell-make-comint cmd process-name nil))
+    (format "*%s*" process-name)))
 
 ;; kernel management
 
@@ -317,15 +327,15 @@ a new kernel will be started."
       (cl-destructuring-bind (code name callback args) val
         (ob-ipython--run-async code name callback args)))))
 
-(defun ob-ipython--execute-request-async (code name callback args)
-  (ob-ipython--enqueue 'ob-ipython--async-queue (list code name callback args))
+(defun ob-ipython--execute-request-async (code kernel-name callback args)
+  (ob-ipython--enqueue 'ob-ipython--async-queue (list code kernel-name callback args))
   (ob-ipython--maybe-run-async))
 
-(defun ob-ipython--execute-request (code name)
+(defun ob-ipython--execute-request (code kernel-name)
   (with-temp-buffer
     (let ((ret (apply 'call-process-region code nil
                       (ob-ipython--get-python) nil t nil
-                      (list "--" ob-ipython-client-path "--conn-file" name "--execute"))))
+                      (list "--" ob-ipython-client-path "--conn-file" kernel-name "--execute"))))
       (if (> ret 0)
           (ob-ipython--dump-error (buffer-string))
         (goto-char (point-min))
@@ -512,27 +522,67 @@ a new kernel will be started."
 
 (defvar ob-ipython-configured-kernels nil)
 
+(defun ob-ipython--get-kernel-from-file (name)
+  "Return kernel from provided filename.  If kernel
+is empty, return python by default."
+  ;; TODO Should we be more clever about the default python kernel returned?
+  (let* ((filename (->> (-map (lambda (dir) (directory-files dir t name))
+                              ob-ipython-kernel-paths)
+                        (-flatten)
+                        (car)))
+         (kernel (if filename
+                     (->> filename
+                          (json-read-file)
+                          (assoc 'kernel_name)
+                          (cdr))
+                   (error "Can't find kernel file; make sure jupyter paths are correct and kernel file is there"))))
+
+    (if (string= "" kernel)
+        "python"
+      kernel)))
+
 (defun ob-ipython--get-kernels ()
-  "Return a list of available jupyter kernels and their corresponding languages.
-The elements of the list have the form (\"kernel\" \"language\")."
+  "Return a list of available jupyter kernels and their corresponding languages
+and display names. The elements of the list have the form (\"kernel\" \"language\" \"display_name\")."
   (and ob-ipython-command
        (let ((kernelspecs (cdar (json-read-from-string
                                  (shell-command-to-string
                                   (s-concat ob-ipython-command " kernelspec list --json"))))))
-         (-map (lambda (spec)
-                 (cons (symbol-name (car spec))
-                       (->> (cdr spec)
-                            (assoc 'spec)
-                            cdr
-                            (assoc 'language)
-                            cdr)))
-               kernelspecs))))
+         (->> kernelspecs
+              (-map (lambda (kernelspec)
+                      (list (symbol-name (car kernelspec))
+                            (->> (cdr kernelspec)
+                                 (assoc 'spec)
+                                 cdr
+                                 (assoc 'language)
+                                 cdr)
+                            (->> (cdr kernelspec)
+                                 (assoc 'spec)
+                                 cdr
+                                 (assoc 'display_name)
+                                 cdr
+                                 (replace-regexp-in-string "[[:space:]]" "")
+                                 ))))
+              ;; We'll later make python without a version number the default.
+              (-insert-at 0 '("python" "python" "Python"))
+              ;; When invoking via jupyter-X, we want X (i.e., language) case insensitive.
+              ;; Here, we insert copies of the above found kernels with lower case names.
+              (-map (lambda (x) (list x (-snoc (-butlast x) (downcase (-last-item x))))))
+              (-flatten-n 1)
+              )
+         )))
 
-(defun ob-ipython--configure-kernel (kernel-lang)
+(defun ob-ipython--get-display-name (kernel)
+  "Return display-name for KERNEL."
+  ;; get display-name for kernel and capitalize first letter
+  (capitalize (nth 2 (assoc kernel ob-ipython-configured-kernels))))
+
+(defun ob-ipython--configure-kernel (kernel-lang-display)
   "Configure org mode to use specified kernel."
-  (let* ((kernel (car kernel-lang))
-         (language (cdr kernel-lang))
-         (jupyter-lang (concat "jupyter-" language))
+  (let* ((kernel (car kernel-lang-display))
+         (language (nth 1 kernel-lang-display))
+         (display-name (nth 2 kernel-lang-display))
+         (jupyter-lang (concat "jupyter-" display-name))
          (mode (intern (or (cdr (assoc language org-src-lang-modes))
                            (replace-regexp-in-string "[0-9]*" "" language))))
          (header-args (intern (concat "org-babel-default-header-args:" jupyter-lang))))
@@ -541,13 +591,13 @@ The elements of the list have the form (\"kernel\" \"language\")."
     ;; exist yet.
     (unless (and (boundp header-args) (symbol-value header-args))
       (set (intern (concat "org-babel-default-header-args:" jupyter-lang))
-           `((:session . ,language)
+           `(;;(:session . ,language)
              (:kernel . ,kernel))))
     (defalias (intern (concat "org-babel-execute:" jupyter-lang))
       'org-babel-execute:ipython)
     (defalias (intern (concat "org-babel-" jupyter-lang "-initiate-session"))
       'org-babel-ipython-initiate-session)
-    kernel-lang))
+    kernel-lang-display))
 
 (defun ob-ipython-auto-configure-kernels (&optional replace)
   "Auto-configure kernels for use with org-babel based on the
@@ -557,7 +607,9 @@ have previously been configured."
   (interactive (list t))
   (when (or replace (not ob-ipython-configured-kernels))
     (setq ob-ipython-configured-kernels
-          (-map 'ob-ipython--configure-kernel (ob-ipython--get-kernels)))))
+          (-map 'ob-ipython--configure-kernel (ob-ipython--get-kernels))))
+  ;; Set default kernel to python
+  (setq org-babel-default-header-args:ipython '((:kernel . "python"))))
 
 (defvar org-babel-default-header-args:ipython '())
 
@@ -575,11 +627,14 @@ have previously been configured."
 
 (defun ob-ipython--get-session-from-edit-buffer (buffer)
   (with-current-buffer buffer
-    (->> org-src--babel-info
-         (nth 2)
-         (assoc :session)
-         cdr
-         ob-ipython--normalize-session)))
+    (let* ((params (nth 2 org-src--babel-info))
+           (kernel (cdr (assoc :kernel params)))
+           (session (cdr (assoc :session params))))
+      (if (s-ends-with? ".json" session)
+          session
+        (format "%s-%s"
+                (ob-ipython--get-display-name kernel)
+                (ob-ipython--normalize-session session))))))
 
 (defun org-babel-execute:ipython (body params)
   "Execute a block of IPython code with Babel.
@@ -592,6 +647,7 @@ This function is called by `org-babel-execute-src-block'."
 (defun ob-ipython--execute-async (body params)
   (let* ((file (cdr (assoc :ipyfile params)))
          (session (cdr (assoc :session params)))
+         (kernel (cdr (assoc :kernel params)))
          (result-type (cdr (assoc :result-type params)))
          (sentinel (ipython--async-gen-sentinel)))
     (ob-ipython--create-kernel (ob-ipython--normalize-session session)
@@ -599,7 +655,11 @@ This function is called by `org-babel-execute-src-block'."
     (ob-ipython--execute-request-async
      (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                     params (org-babel-variable-assignments:python params))
-     (ob-ipython--normalize-session session)
+     (if (s-ends-with? ".json" session)
+         session
+       (format "%s-%s"
+               (ob-ipython--get-display-name kernel)
+               (ob-ipython--normalize-session session)))
      (lambda (ret sentinel buffer file result-type)
        (let ((replacement (ob-ipython--process-response ret file result-type)))
          (ipython--async-replace-sentinel sentinel buffer replacement)))
@@ -609,6 +669,7 @@ This function is called by `org-babel-execute-src-block'."
 (defun ob-ipython--execute-sync (body params)
   (let* ((file (cdr (assoc :ipyfile params)))
          (session (cdr (assoc :session params)))
+         (kernel (cdr (assoc :kernel params)))
          (result-type (cdr (assoc :result-type params))))
     (ob-ipython--create-kernel (ob-ipython--normalize-session session)
                                (cdr (assoc :kernel params)))
@@ -616,7 +677,11 @@ This function is called by `org-babel-execute-src-block'."
                      (ob-ipython--execute-request
                       (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                                      params (org-babel-variable-assignments:python params))
-                      (ob-ipython--normalize-session session))))
+                      (if (s-ends-with? ".json" session)
+                          session
+                        (format "%s-%s"
+                                (ob-ipython--get-display-name kernel)
+                                (ob-ipython--normalize-session session))))))
       (ob-ipython--process-response ret file result-type))))
 
 (defun ob-ipython--process-response (ret file result-type)
@@ -685,7 +750,8 @@ Make sure your src block has a :session param.")
     (when (not (s-ends-with-p ".json" session))
       (ob-ipython--create-kernel (ob-ipython--normalize-session session)
                                  (cdr (assoc :kernel params))))
-    (ob-ipython--create-repl (ob-ipython--normalize-session session))))
+    (ob-ipython--create-repl (ob-ipython--normalize-session session)
+                             (cdr (assoc :kernel params)))))
 
 ;; async
 
